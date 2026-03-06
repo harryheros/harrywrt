@@ -334,7 +334,6 @@ jobs:
             "${PREFIX}-ext4-bios.img.gz"
             "${PREFIX}-ext4-uefi.img.gz"
             "SHA256SUMS"
-            "build.log"
           )
 
           echo "Checking for existing release: ${TAG} (repo: ${REPO})"
