@@ -23,43 +23,76 @@ mkdir -p "${FILES_DIR}/etc/uci-defaults"
 
 # ------------------------------------------------------------
 # 0) Build-time fix: Go toolchain policy for geoview
-#    Only patches the geoview package makefile to avoid
-#    interfering with other Go packages that require local.
+#
+#    Root cause: GOTOOLCHAIN=local is set in the OpenWrt golang
+#    build framework (golang-package.mk / golang-build.sh), which
+#    all Go packages inherit. geoview requires Go >= 1.24 but the
+#    system Go on ubuntu-22.04 runners is 1.23.x, so we must
+#    switch the framework to GOTOOLCHAIN=auto to allow it to
+#    download the required toolchain version at build time.
+#
+#    Strategy:
+#      1) Patch the golang framework files (primary fix)
+#      2) Also inject GOTOOLCHAIN=auto directly into geoview's
+#         Makefile as a double-insurance
+#      3) Validate with a warning-only approach (never exit 1)
 # ------------------------------------------------------------
-echo "[patch] Patching GOTOOLCHAIN for geoview ..."
+echo "[patch] Patching GOTOOLCHAIN=local -> auto in golang framework ..."
 
-GEOVIEW_MK_CANDIDATES=(
-  "feeds/packages/net/geoview/Makefile"
-  "feeds/passwall_packages/net/geoview/Makefile"
+GOLANG_FRAMEWORK_FILES=(
+  "feeds/packages/lang/golang/golang-package.mk"
+  "feeds/packages/lang/golang/golang-build.sh"
 )
 
-patched_any=0
-for mk in "${GEOVIEW_MK_CANDIDATES[@]}"; do
-  if [ -f "$mk" ]; then
-    if grep -qE '\bGOTOOLCHAIN=local\b' "$mk"; then
-      sed -i -E 's/\bGOTOOLCHAIN=local\b/GOTOOLCHAIN=auto/g' "$mk"
-      echo "[patch] Patched: $mk"
+for f in "${GOLANG_FRAMEWORK_FILES[@]}"; do
+  if [ -f "$f" ]; then
+    if grep -qE '\bGOTOOLCHAIN=local\b' "$f"; then
+      sed -i -E 's/\bGOTOOLCHAIN=local\b/GOTOOLCHAIN=auto/g' "$f"
+      echo "[patch] Framework patched: $f"
     else
-      echo "[patch] No GOTOOLCHAIN=local found in: $mk (may already be auto or not set)"
+      echo "[patch] No GOTOOLCHAIN=local in: $f (already auto or not set)"
     fi
-    patched_any=1
+  else
+    echo "[patch] WARNING: framework file not found: $f" >&2
   fi
 done
 
-# Fallback: if geoview Makefile not found at known paths, scan passwall feed
-if [[ "$patched_any" -eq 0 ]]; then
-  echo "[patch] geoview Makefile not found at known paths, scanning passwall feeds ..."
-  while IFS= read -r -d '' mk; do
-    if grep -qiE 'geoview' "$mk" && grep -qE '\bGOTOOLCHAIN=local\b' "$mk"; then
-      sed -i -E 's/\bGOTOOLCHAIN=local\b/GOTOOLCHAIN=auto/g' "$mk"
-      echo "[patch] Patched (fallback): $mk"
-      patched_any=1
-    fi
-  done < <(find feeds/passwall_packages feeds/packages -name "Makefile" -print0 2>/dev/null)
-fi
+# Also scan for any remaining GOTOOLCHAIN=local in the golang lang dir
+# (covers version-specific subdirs like golang-1.23/, golang-1.24/, etc.)
+while IFS= read -r -d '' f; do
+  if grep -qE '\bGOTOOLCHAIN=local\b' "$f"; then
+    sed -i -E 's/\bGOTOOLCHAIN=local\b/GOTOOLCHAIN=auto/g' "$f"
+    echo "[patch] Additional file patched: $f"
+  fi
+done < <(find feeds/packages/lang/golang -type f \( -name "*.mk" -o -name "*.sh" \) -print0 2>/dev/null)
 
-if [[ "$patched_any" -eq 0 ]]; then
-  echo "[patch] WARNING: geoview Makefile not found. Skipping GOTOOLCHAIN patch." >&2
+# Double-insurance: inject GOTOOLCHAIN=auto into geoview Makefile directly
+GEOVIEW_MK_CANDIDATES=(
+  "feeds/passwall_packages/geoview/Makefile"
+  "feeds/packages/net/geoview/Makefile"
+)
+for mk in "${GEOVIEW_MK_CANDIDATES[@]}"; do
+  if [ -f "$mk" ]; then
+    echo "[patch] Found geoview Makefile: $mk"
+    if ! grep -qE '\bGOTOOLCHAIN\b' "$mk"; then
+      # Inject after the first GO_PKG line, or at end of variable block
+      sed -i '/^include.*golang-package/i export GOTOOLCHAIN=auto' "$mk"
+      echo "[patch] Injected GOTOOLCHAIN=auto into: $mk"
+    else
+      sed -i -E 's/\bGOTOOLCHAIN=local\b/GOTOOLCHAIN=auto/g' "$mk"
+      echo "[patch] Updated GOTOOLCHAIN in: $mk"
+    fi
+  fi
+done
+
+# Sanity check: warn (not fail) if GOTOOLCHAIN=local is still present anywhere
+remaining=$(grep -RInE '\bGOTOOLCHAIN=local\b' feeds/packages/lang/golang 2>/dev/null || true)
+if [[ -n "$remaining" ]]; then
+  echo "[patch] WARNING: GOTOOLCHAIN=local still found in golang framework:" >&2
+  echo "$remaining" | head -n 20 >&2
+  echo "[patch] This may cause geoview build failure if Go >= 1.24 is required." >&2
+else
+  echo "[patch] Confirmed: no GOTOOLCHAIN=local remaining in golang framework."
 fi
 
 echo "[patch] Go toolchain patch complete."
