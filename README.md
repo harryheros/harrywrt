@@ -29,13 +29,11 @@ The goal of HarryWrt is to provide a reliable and extensible base firmware suita
 
 ## Releases
 
-Firmware builds are published on the GitHub Releases page.
+Firmware builds are published on the [GitHub Releases](https://github.com/harryheros/harrywrt/releases) page.
 
-Users can download the latest images and release notes from:
+Users can download the latest firmware images and release notes there.
 
-https://github.com/harryheros/harrywrt/releases
-
-Each release includes firmware images and checksum files for integrity verification.
+Each release includes firmware images and SHA256 checksum files for integrity verification.
 
 ---
 
@@ -135,7 +133,7 @@ The firmware already contains commonly required components such as:
 - required kernel modules such as tun, tproxy, and nftables
 - commonly required runtime libraries
 
-Users may install additional networking applications (such as Passwall2, OpenClash, or other proxy clients) after adding the appropriate package feeds.
+Users may install additional networking applications such as Passwall2, OpenClash, or other proxy clients after adding the appropriate package feeds.
 
 ---
 
