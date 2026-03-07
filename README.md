@@ -82,6 +82,7 @@ Argon theme is included but not enabled by default.
 - nftables (fw4)
 - iptables-nft
 - kmod-tun
+- additional netfilter modules for advanced networking (tproxy / socket support)
 
 ---
 
