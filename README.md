@@ -5,7 +5,7 @@
 
 HarryWrt is a clean and stable OpenWrt-based firmware focused on reliability, performance, and extensibility.
 
-Built on official OpenWrt 24.10.x, HarryWrt is designed for users who want a minimal yet practical base system with useful built-in tools and expanded storage space for future customization.
+Built on official OpenWrt 24.10.x, HarryWrt is intended for users who want a minimal yet practical base system with useful built-in tools and expanded storage space for future customization.
 
 ---
 
@@ -13,7 +13,7 @@ Built on official OpenWrt 24.10.x, HarryWrt is designed for users who want a min
 
 HarryWrt is not a heavily modified OpenWrt fork.
 
-Instead, it preserves the official OpenWrt experience while improving the default environment for real-world deployments.
+Instead, it preserves the official OpenWrt experience while improving the default environment for practical deployments.
 
 Key characteristics:
 
@@ -30,8 +30,6 @@ The goal of HarryWrt is to provide a reliable and extensible base firmware suita
 ## Releases
 
 Firmware builds are published on the [GitHub Releases](https://github.com/harryheros/harrywrt/releases) page.
-
-Users can download the latest firmware images and release notes there.
 
 Each release includes firmware images and SHA256 checksum files for integrity verification.
 
@@ -82,7 +80,7 @@ Argon theme is included but not enabled by default.
 - nftables (fw4)
 - iptables-nft
 - kmod-tun
-- additional netfilter modules for advanced networking (tproxy / socket support)
+- additional netfilter modules for advanced networking features
 
 ---
 
@@ -91,22 +89,24 @@ Argon theme is included but not enabled by default.
 Hostname: HarryWrt  
 Timezone: Asia/Hong_Kong  
 Default LAN IP: 192.168.1.1  
-Default login: root  
-Default password: none
+Default user: root  
+Password state: unset on first boot
 
 ---
 
-## Web UI Access
+## First Access
 
-After booting, HarryWrt will use the default LAN address and provide DHCP service for connected clients.
+After booting, HarryWrt uses the default LAN address and provides DHCP service for connected clients.
 
 You can access the LuCI Web UI at:
 
 https://192.168.1.1
 
+On first access, set a password for the system before continuing with further configuration.
+
 To change the LAN IP address via SSH:
 
-vi /etc/config/network
+    vi /etc/config/network
 
 Note: Your browser may display an SSL warning because the system uses a self-signed certificate. This is expected.
 
@@ -123,18 +123,20 @@ Recommended choices:
 
 ---
 
-## Advanced Networking Support
+## Extended Networking Capabilities
 
-HarryWrt includes additional networking capabilities that make it easier to deploy advanced routing or proxy solutions when needed.
+HarryWrt includes a number of components commonly required for advanced networking use cases.
 
-The firmware already contains commonly required components such as:
+Examples include:
 
-- runtime support for xray-core and sing-box
-- v2ray-geoip and v2ray-geosite data
-- required kernel modules such as tun, tproxy, and nftables
-- commonly required runtime libraries
+- modern firewall and packet filtering components
+- tun and related kernel support
+- common runtime libraries used by additional networking software
+- optional geodata packages for software that requires them
 
-Users may install additional networking applications such as Passwall2, OpenClash, or other proxy clients after adding the appropriate package feeds.
+This makes the firmware easier to extend for routing, tunneling, filtering, or other advanced network application scenarios.
+
+Users may install additional applications after adding the appropriate package feeds.
 
 ---
 
@@ -152,7 +154,7 @@ LuCI → System → System → Language and Style → Theme → Argon
 
 HarryWrt is designed to remain highly compatible with upstream OpenWrt packages.
 
-Users may install additional LuCI applications or utilities such as monitoring tools, networking utilities, proxy clients, or file services through the standard OpenWrt package management system.
+Users may install additional LuCI applications or utilities such as monitoring tools, networking utilities, storage services, or other OpenWrt packages through the standard package management system.
 
 Packages can be installed through the Web UI or via SSH using the OpenWrt package manager.
 
@@ -191,7 +193,6 @@ This repository contains build scripts and configurations that follow the same o
 - OpenWrt Project
 - LuCI Project
 - Argon Theme by jerrykuku
-- GitHub Actions build system
 
 ---
 
