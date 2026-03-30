@@ -1,169 +1,176 @@
-# HarryWrt — Clean OpenWrt-Based Firmware (x86_64)
+# HarryWrt — Clean OpenWrt-Based Firmware
 
 [![License](https://img.shields.io/badge/license-GPLv2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
-[![Platform](https://img.shields.io/badge/platform-BIOS%20%7C%20UEFI-orange.svg)](#)
-[![Base](https://img.shields.io/badge/base-OpenWrt%2024.10.x-green.svg)](#)
-[![Architecture](https://img.shields.io/badge/arch-x86__64-lightgrey.svg)](#)
+[![Platform](https://img.shields.io/badge/platform-x86__64%20%7C%20aarch64-orange.svg)](#)
+[![Base](https://img.shields.io/badge/base-OpenWrt%2024.10.6%20%7C%2025.12.2-green.svg)](#)
 
 HarryWrt is a clean, stable, and extensible firmware based on official OpenWrt.
 
-It is designed for users who want a minimal, reliable system with practical defaults and strong compatibility with upstream packages.
+Designed for users who want a minimal, reliable system with practical defaults and strong compatibility with upstream packages.
 
 ---
 
-## ✨ Features
+## Features
 
-- Clean base system with no unnecessary modifications
+- Clean base system — no unnecessary modifications
 - Fully compatible with upstream OpenWrt packages
-- Expanded root filesystem (1GB) for future extensions
-- Pre-installed essential tools for diagnostics and maintenance
+- Dual OpenWrt version support (24.10.6 LTS + 25.12.2 stable)
+- Dual platform support (x86_64 + aarch64 ARM64)
+- Pre-installed Passwall2 dependencies for offline setup
 - Modern firewall stack (nftables / fw4)
-- Ready for advanced networking and proxy deployments
 - Built and released automatically via GitHub Actions
 
 ---
 
-## 📦 Firmware Information
+## Firmware Matrix
 
-- Base: OpenWrt 24.10.x  
-- Target: x86_64 (generic)  
-- Edition: Clean  
-- Root filesystem: 1024MB  
+| OpenWrt | Platform | rootfs | Package Manager | Status |
+|---------|----------|--------|-----------------|--------|
+| 24.10.6 | x86_64   | 768MB  | opkg            | LTS (EOL Sep 2026) |
+| 24.10.6 | aarch64  | 512MB  | opkg            | LTS (EOL Sep 2026) |
+| 25.12.2 | x86_64   | 768MB  | apk             | Current Stable |
+| 25.12.2 | aarch64  | 512MB  | apk             | Current Stable |
+
+### Which version should I choose?
+
+**24.10.6** — If you have an existing opkg-based setup with many installed packages and want a stable, familiar upgrade path. Will receive security fixes until September 2026.
+
+**25.12.2** — Recommended for new installations. Uses the new apk package manager (replaces opkg). Better performance, latest security patches, and long-term support.
+
+### Which platform?
+
+**x86_64** — For soft routers, PCs, virtual machines (Proxmox/ESXi/QEMU), industrial mini-PCs.
+
+**aarch64 (armsr/armv8)** — Generic ARM64 UEFI image. Works with NanoPi R2S/R4S/R5S/R6S, Raspberry Pi 4/5, and other ARM64 devices that support UEFI boot. For device-specific optimizations, consider using dedicated target images.
 
 ---
 
-## ⬇️ Downloads
+## Downloads
 
 Firmware images are available on the GitHub Releases page:
 
-👉 https://github.com/harryheros/harrywrt/releases
+https://github.com/harryheros/harrywrt/releases
 
-Each release includes:
+Each release includes BIOS and UEFI images (x86_64), squashfs and ext4 variants, and SHA256 checksum files.
 
-- BIOS and UEFI images
-- squashfs and ext4 variants
-- SHA256 checksum file
+### Recommended Images
 
----
-
-## 💿 Recommended Images
-
-- `squashfs-uefi.img.gz` → modern systems (UEFI)
-- `squashfs-bios.img.gz` → legacy BIOS systems
+| Use Case | File |
+|----------|------|
+| Modern x86 PC / VM (UEFI) | `*-x86_64-squashfs-uefi.img.gz` |
+| Legacy x86 PC (BIOS) | `*-x86_64-squashfs-bios.img.gz` |
+| ARM64 devices | `*-aarch64-squashfs-*.img.gz` |
 
 ---
 
-## 🧩 Included Components
+## Included Components
 
 ### Web Interface
-
-- LuCI (HTTPS)
-- luci-compat
+LuCI (HTTPS), luci-compat, ttyd (Web Terminal)
 
 ### Themes
-
-- Default: Bootstrap (official OpenWrt)
-- Optional: Argon (not enabled by default)
+Default: Bootstrap (official). Optional: Argon (included, not enabled by default)
 
 ### System Tools
-
-- bash
-- curl
-- wget-ssl
-- unzip
-- htop
-- openssl-util
-- ca-bundle
+bash, curl, wget-ssl, unzip, htop, openssl-util, ca-bundle
 
 ### Network Utilities
-
-- ip-full
-- iperf3
-- tcpdump
-- ethtool
-- resolveip
+ip-full, iperf3, tcpdump, ethtool, resolveip
 
 ### Firewall / Kernel
+nftables (fw4), iptables-nft compatibility layer, kmod-tun, TProxy modules (nft + ipt), nft-socket, nft-nat
 
-- nftables (fw4)
-- iptables-nft
-- kmod-tun
-- advanced netfilter modules
-
----
-
-## ⚙️ Default Settings
-
-- Hostname: HarryWrt  
-- Timezone: Asia/Hong_Kong  
-- LAN IP: 192.168.1.1  
-- User: root  
-- Password: unset on first boot  
+### Passwall2 Ready
+Pre-installed dependencies: xray-core, sing-box, geoview, v2ray-geoip, v2ray-geosite, tcping, coreutils, libev, libsodium, libudns. Install passwall2 itself via package manager or manual upload after first boot.
 
 ---
 
-## 🌐 First Access
+## Default Settings
 
-After boot:
+- Hostname: HarryWrt
+- Timezone: Asia/Hong_Kong
+- LAN IP: 192.168.1.1
+- User: root
+- Password: unset on first boot
+- NTP: enabled (pool.ntp.org)
 
-- Connect via LAN (DHCP enabled)
-- Open: https://192.168.1.1
+---
+
+## First Access
+
+After boot, connect via LAN (DHCP enabled) and open https://192.168.1.1
 
 Set a password on first login before further configuration.
 
-> Note: Browser SSL warnings are expected (self-signed certificate)
+> Browser SSL warnings are expected (self-signed certificate).
 
 ---
 
-## 🔧 Customization
+## Installing Passwall2
 
-HarryWrt is designed to remain fully compatible with upstream OpenWrt.
+### On OpenWrt 24.10.6 (opkg)
 
-You can install additional packages via:
+```sh
+# Add passwall2 feed (if not already configured)
+echo "src/gz passwall2 https://your-feed-url/packages/x86_64/passwall2" >> /etc/opkg/customfeeds.conf
+opkg update
+opkg install luci-app-passwall2
+```
 
-- LuCI (Web UI)
-- opkg (SSH)
+### On OpenWrt 25.12.2 (apk)
+
+```sh
+# Download the .apk package from passwall2 releases
+wget https://github.com/Openwrt-Passwall/openwrt-passwall2/releases/download/VERSION/luci-app-passwall2_VERSION_all.apk
+apk add --allow-untrusted luci-app-passwall2_*.apk
+/etc/init.d/rpcd restart
+```
+
+All required dependencies (xray-core, sing-box, geoview, etc.) are already pre-installed in HarryWrt.
 
 ---
 
-## 🎨 Optional: Enable Argon Theme
+## Customization
+
+HarryWrt remains fully compatible with upstream OpenWrt. Install additional packages via LuCI (Web UI) or the command line (opkg on 24.10 / apk on 25.12).
+
+### Enable Argon Theme
 
 LuCI → System → System → Language and Style → Theme → Argon
 
 ---
 
-## 🔐 Integrity Verification
+## Integrity Verification
 
-Each release includes a `SHA256SUMS` file.
+Each release includes SHA256 checksum files. Always verify downloaded images before use:
 
-Always verify downloaded images before use.
-
----
-
-## ⚠️ Disclaimer
-
-HarryWrt is provided as-is without warranty.
-
-This firmware contains no telemetry, hidden services, or proprietary components.
-
-Users are responsible for their own deployments and configurations.
+```sh
+sha256sum -c SHA256SUMS-24.10.6-x86_64
+```
 
 ---
 
-## ⚖️ License
+## Disclaimer
+
+HarryWrt is provided as-is without warranty. This firmware contains no telemetry, hidden services, or proprietary components. Users are responsible for their own deployments and configurations.
+
+---
+
+## License
 
 HarryWrt follows the OpenWrt licensing model (GPL-2.0).
 
 ---
 
-## 🙏 Credits
+## Credits
 
-- OpenWrt Project  
-- LuCI Project  
+- OpenWrt Project
+- LuCI Project
 - Argon Theme (jerrykuku)
+- Passwall2 (Openwrt-Passwall Organization)
 
 ---
 
-## 👤 Author
+## Author
 
 Maintained by: harryheros

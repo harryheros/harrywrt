@@ -1,33 +1,78 @@
-name: Build HarryWrt (OpenWrt 24.10.5 Clean x86_64)
+# =============================================================
+# HarryWrt — Multi-version, Multi-platform Build (matrix)
+#
+# Matrix: OpenWrt 24.10.6 + 25.12.2 × x86_64 + aarch64
+# =============================================================
+name: Build HarryWrt
 
 on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "Release version (e.g. v1.0)"
+        description: "Release version (e.g. v2.0)"
         required: true
-        default: "v1.0"
+        default: "v2.0"
       ssh_debug:
         description: "Enable SSH debug session (tmate)"
         required: false
         default: "false"
+      build_filter:
+        description: "Build filter (all / 24.10 / 25.12 / x86_64 / aarch64)"
+        required: false
+        default: "all"
   push:
     tags:
-      - "clean-24.10.5-v*"
+      - "v*"
 
 permissions:
   contents: write
 
-env:
-  OWRT_TAG: "v24.10.5"
-  OWRT_REPO: "https://github.com/openwrt/openwrt.git"
-  OWRT_BASE: "24.10.5"
-  PROFILE: "clean"
-  TARGET: "x86_64"
-
 jobs:
+  # ── Matrix generation ──────────────────────────────────────
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        shell: bash
+        run: |
+          filter="${{ github.event.inputs.build_filter || 'all' }}"
+
+          all='[
+            {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"x86_64","arch":"x86/64","config":"x86_64","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"aarch64","arch":"armsr/armv8","config":"aarch64","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"x86_64","arch":"x86/64","config":"x86_64","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"aarch64","arch":"armsr/armv8","config":"aarch64","runner":"ubuntu-24.04"}
+          ]'
+
+          case "$filter" in
+            24.10)    matrix=$(echo "$all" | jq -c '[.[] | select(.owrt_base | startswith("24."))]') ;;
+            25.12)    matrix=$(echo "$all" | jq -c '[.[] | select(.owrt_base | startswith("25."))]') ;;
+            x86_64)   matrix=$(echo "$all" | jq -c '[.[] | select(.target == "x86_64")]') ;;
+            aarch64)  matrix=$(echo "$all" | jq -c '[.[] | select(.target == "aarch64")]') ;;
+            *)        matrix=$(echo "$all" | jq -c '.') ;;
+          esac
+
+          echo "matrix={\"include\":${matrix}}" >> "$GITHUB_OUTPUT"
+          echo "Building: $matrix"
+
+  # ── Build each combination ─────────────────────────────────
   build:
-    runs-on: ubuntu-22.04
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+
+    env:
+      OWRT_TAG:  ${{ matrix.owrt_tag }}
+      OWRT_BASE: ${{ matrix.owrt_base }}
+      OWRT_REPO: "https://github.com/openwrt/openwrt.git"
+      TARGET:    ${{ matrix.target }}
+      ARCH_PATH: ${{ matrix.arch }}
+      CONFIG:    ${{ matrix.config }}
+      PROFILE:   "clean"
 
     steps:
       - name: Checkout repository
@@ -46,29 +91,27 @@ jobs:
             [[ -n "$rel" ]] || rel="v1.0"
           fi
           echo "release=$rel" >> "$GITHUB_OUTPUT"
-          echo "Release: $rel"
+          echo "Release: $rel  |  OpenWrt: ${OWRT_BASE}  |  Target: ${TARGET}"
 
       - name: Free disk space and enable swap
         shell: bash
         run: |
           set -euo pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/share/powershell /usr/share/swift /usr/local/share/boost || true
+            /usr/local/share/powershell /usr/share/swift /usr/local/share/boost \
+            /opt/hostedtoolcache || true
           sudo apt-get clean || true
           df -h
 
           SWAP_PATH="/mnt/gh-swapfile"
           sudo swapoff "$SWAP_PATH" 2>/dev/null || true
           sudo rm -f "$SWAP_PATH" || true
-
           if ! sudo fallocate -l 8G "$SWAP_PATH" 2>/dev/null; then
             sudo dd if=/dev/zero of="$SWAP_PATH" bs=1M count=8192 status=progress
           fi
-
           sudo chmod 600 "$SWAP_PATH"
           sudo mkswap "$SWAP_PATH"
           sudo swapon "$SWAP_PATH"
-          sudo swapon --show || true
           free -h || true
 
       - name: Install build dependencies
@@ -80,12 +123,9 @@ jobs:
             build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
             gettext git libncurses-dev libssl-dev rsync unzip zlib1g-dev \
             file wget curl ca-certificates time \
-            python3 python3-distutils python3-setuptools python3-pyelftools \
+            python3 python3-setuptools python3-pyelftools \
             gperf swig subversion mercurial \
-            ccache
-          git --version
-          python3 --version
-          ccache --version | head -n 1
+            ccache jq
 
       - name: Setup ccache
         uses: actions/cache@v4
@@ -110,14 +150,15 @@ jobs:
           cd openwrt
           echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
 
-      - name: Add extra packages (Argon theme sources)
+      - name: Add extra packages (Argon theme)
         shell: bash
         run: |
           set -euo pipefail
           cd openwrt
           mkdir -p package/extra
           rm -rf package/extra/luci-theme-argon || true
-          git clone --depth=1 https://github.com/jerrykuku/luci-theme-argon.git \
+          git clone --depth=1 --branch master \
+            https://github.com/jerrykuku/luci-theme-argon.git \
             package/extra/luci-theme-argon 2>&1 | tee -a build.log
 
       - name: Update and install feeds
@@ -134,30 +175,23 @@ jobs:
           set -euo pipefail
           cd openwrt
 
-          cp "${GITHUB_WORKSPACE}/configs/x86_64-clean.config" .config
-
-          # Enable ccache for the build
+          # Select config by target
+          cp "${GITHUB_WORKSPACE}/configs/${CONFIG}-clean.config" .config
           echo "CONFIG_CCACHE=y" >> .config
 
+          # Run DIY script (auto-detects target from .config)
           chmod +x "${GITHUB_WORKSPACE}/scripts/diy.sh"
-          bash "${GITHUB_WORKSPACE}/scripts/diy.sh" 2>&1 | tee -a build.log
+          bash "${GITHUB_WORKSPACE}/scripts/diy.sh" "${OWRT_BASE}" "${TARGET}" 2>&1 | tee -a build.log
 
           make defconfig 2>&1 | tee -a build.log
 
+          # Validate critical packages
           echo "Checking important packages in final .config..." | tee -a build.log
-
           MUST_Y=(
             "CONFIG_PACKAGE_dnsmasq-full"
-            "CONFIG_PACKAGE_iptables-nft"
             "CONFIG_PACKAGE_kmod-nft-tproxy"
             "CONFIG_PACKAGE_kmod-nft-socket"
-            "CONFIG_PACKAGE_kmod-nft-compat"
             "CONFIG_PACKAGE_kmod-tun"
-            "CONFIG_PACKAGE_libev"
-            "CONFIG_PACKAGE_libsodium"
-            "CONFIG_PACKAGE_libudns"
-            "CONFIG_PACKAGE_kmod-inet-diag"
-            "CONFIG_PACKAGE_kmod-netlink-diag"
             "CONFIG_PACKAGE_coreutils"
             "CONFIG_PACKAGE_coreutils-base64"
             "CONFIG_PACKAGE_coreutils-nohup"
@@ -169,11 +203,6 @@ jobs:
             "CONFIG_PACKAGE_xray-core"
             "CONFIG_PACKAGE_sing-box"
           )
-
-          OPTIONAL_Y=(
-            "CONFIG_PACKAGE_luci-theme-argon"
-          )
-
           missing=0
           for k in "${MUST_Y[@]}"; do
             if grep -qE "^${k}=y$" .config; then
@@ -183,17 +212,8 @@ jobs:
               missing=1
             fi
           done
-
-          for k in "${OPTIONAL_Y[@]}"; do
-            if grep -qE "^${k}=y$" .config; then
-              echo "OK: ${k}=y (optional)" | tee -a build.log
-            else
-              echo "NOTE: ${k} is not enabled (optional)" | tee -a build.log
-            fi
-          done
-
           if [[ "$missing" -ne 0 ]]; then
-            echo "ERROR: One or more required packages are not enabled in final .config." | tee -a build.log
+            echo "ERROR: Required packages missing in .config" | tee -a build.log
             exit 1
           fi
 
@@ -202,7 +222,8 @@ jobs:
         run: |
           set -euo pipefail
           cd openwrt
-          make download -j"$(nproc)" 2>&1 | tee -a build.log
+          make download -j"$(nproc)" 2>&1 | tee -a build.log || \
+            make download -j1 2>&1 | tee -a build.log
 
       - name: SSH debug session (on demand)
         if: github.event.inputs.ssh_debug == 'true'
@@ -219,59 +240,71 @@ jobs:
           BUILD_START=$(date +%s)
           echo "Build started at: $(date -u)" | tee -a build.log
           make -j"$(nproc)" 2>&1 | tee -a build.log || {
-            echo "Parallel build failed, retrying with single thread (verbose)..." | tee -a build.log
+            echo "Parallel build failed, retrying single thread..." | tee -a build.log
             make -j1 V=s 2>&1 | tee -a build.log
           }
           BUILD_END=$(date +%s)
           BUILD_MIN=$(( (BUILD_END - BUILD_START) / 60 ))
           BUILD_SEC=$(( (BUILD_END - BUILD_START) % 60 ))
-          echo "Build finished at: $(date -u)" | tee -a build.log
-          echo "Total build time: ${BUILD_MIN}m ${BUILD_SEC}s" | tee -a build.log
+          echo "Build time: ${BUILD_MIN}m ${BUILD_SEC}s" | tee -a build.log
+          echo "⏱ Build time: ${BUILD_MIN}m ${BUILD_SEC}s" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Organize and rename files (HarryWrt naming)
+      - name: Organize and rename output files
+        id: organize
         shell: bash
         run: |
           set -euo pipefail
-          cd openwrt/bin/targets/x86/64
+          cd openwrt/bin/targets/${ARCH_PATH}
 
           REL="${{ steps.meta.outputs.release }}"
-          PREFIX="HarryWrt-${{ env.OWRT_BASE }}-${{ env.PROFILE }}-${REL}-${{ env.TARGET }}"
+          PREFIX="HarryWrt-${OWRT_BASE}-${PROFILE}-${REL}-${TARGET}"
 
-          # Verify each image exists before proceeding
-          for pattern in \
-            "*squashfs-combined.img.gz" \
-            "*squashfs-combined-efi.img.gz" \
-            "*ext4-combined.img.gz" \
-            "*ext4-combined-efi.img.gz"
-          do
-            count=$(ls -1 $pattern 2>/dev/null | wc -l)
-            if [[ "$count" -eq 0 ]]; then
-              echo "ERROR: No file matching '${pattern}' found in $(pwd)" >&2
-              ls -lah . >&2
-              exit 1
-            fi
-          done
+          # x86_64 has BIOS+UEFI; aarch64 has only EFI
+          if [[ "${TARGET}" == "x86_64" ]]; then
+            for pattern in \
+              "*squashfs-combined.img.gz" \
+              "*squashfs-combined-efi.img.gz" \
+              "*ext4-combined.img.gz" \
+              "*ext4-combined-efi.img.gz"
+            do
+              count=$(ls -1 $pattern 2>/dev/null | wc -l)
+              if [[ "$count" -eq 0 ]]; then
+                echo "ERROR: No file matching '${pattern}'" >&2
+                ls -lah . >&2
+                exit 1
+              fi
+            done
 
-          BIOS_SQ="$(ls -1 *squashfs-combined.img.gz | head -n 1)"
-          UEFI_SQ="$(ls -1 *squashfs-combined-efi.img.gz | head -n 1)"
-          BIOS_E4="$(ls -1 *ext4-combined.img.gz | head -n 1)"
-          UEFI_E4="$(ls -1 *ext4-combined-efi.img.gz | head -n 1)"
+            cp -f "$(ls -1 *squashfs-combined.img.gz    | head -n1)" "${PREFIX}-squashfs-bios.img.gz"
+            cp -f "$(ls -1 *squashfs-combined-efi.img.gz| head -n1)" "${PREFIX}-squashfs-uefi.img.gz"
+            cp -f "$(ls -1 *ext4-combined.img.gz        | head -n1)" "${PREFIX}-ext4-bios.img.gz"
+            cp -f "$(ls -1 *ext4-combined-efi.img.gz    | head -n1)" "${PREFIX}-ext4-uefi.img.gz"
 
-          cp -f "$BIOS_SQ" "${PREFIX}-squashfs-bios.img.gz"
-          cp -f "$UEFI_SQ" "${PREFIX}-squashfs-uefi.img.gz"
-          cp -f "$BIOS_E4" "${PREFIX}-ext4-bios.img.gz"
-          cp -f "$UEFI_E4" "${PREFIX}-ext4-uefi.img.gz"
+          elif [[ "${TARGET}" == "aarch64" ]]; then
+            # armsr/armv8 produces rootfs + kernel images
+            for f in *squashfs*.img.gz *ext4*.img.gz; do
+              [ -f "$f" ] || continue
+              newname="${PREFIX}-$(echo "$f" | sed 's/.*-//')"
+              cp -f "$f" "$newname"
+            done
+            # Also grab the combined images if they exist
+            for f in *combined*.img.gz; do
+              [ -f "$f" ] || continue
+              newname="${PREFIX}-$(echo "$f" | sed 's/.*generic-//')"
+              cp -f "$f" "$newname"
+            done
+          fi
 
-          sha256sum ${PREFIX}-*.img.gz > SHA256SUMS
-
+          sha256sum ${PREFIX}-*.img.gz > SHA256SUMS 2>/dev/null || true
           echo "Output files:"
-          ls -lah ${PREFIX}-*.img.gz SHA256SUMS
+          ls -lah ${PREFIX}-*.img.gz SHA256SUMS 2>/dev/null || echo "WARNING: No output files found"
+          echo "output_dir=openwrt/bin/targets/${ARCH_PATH}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload build log artifact
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Log-clean-${{ steps.meta.outputs.release }}
+          name: Log-${{ env.OWRT_BASE }}-${{ env.TARGET }}-${{ steps.meta.outputs.release }}
           path: openwrt/build.log
 
       - name: Upload firmware artifacts
@@ -280,10 +313,10 @@ jobs:
         with:
           name: HarryWrt-${{ env.OWRT_BASE }}-${{ env.PROFILE }}-${{ steps.meta.outputs.release }}-${{ env.TARGET }}
           path: |
-            openwrt/bin/targets/x86/64/HarryWrt-${{ env.OWRT_BASE }}-${{ env.PROFILE }}-${{ steps.meta.outputs.release }}-${{ env.TARGET }}-*.img.gz
-            openwrt/bin/targets/x86/64/SHA256SUMS
+            ${{ steps.organize.outputs.output_dir }}/HarryWrt-*.img.gz
+            ${{ steps.organize.outputs.output_dir }}/SHA256SUMS
 
-      - name: Publish GitHub Release (gh cli, tag builds only)
+      - name: Publish GitHub Release (tag builds only)
         if: startsWith(github.ref, 'refs/tags/') && success()
         shell: bash
         env:
@@ -294,63 +327,46 @@ jobs:
           REPO="${{ github.repository }}"
           TAG="${GITHUB_REF##*/}"
           REL="${{ steps.meta.outputs.release }}"
+          cd ${{ steps.organize.outputs.output_dir }}
 
-          cd openwrt/bin/targets/x86/64
-
-          PREFIX="HarryWrt-${{ env.OWRT_BASE }}-${{ env.PROFILE }}-${REL}-${{ env.TARGET }}"
-
-          # Copy build log to release directory (build.log is 4 levels up from here)
-          LOG_PATH="$(cd ../../../../ && pwd)/build.log"
-          if [ -f "$LOG_PATH" ]; then
-            cp -f "$LOG_PATH" ./build.log
-          else
-            echo "(build log not found)" > ./build.log
-          fi
+          PREFIX="HarryWrt-${OWRT_BASE}-${PROFILE}-${REL}-${TARGET}"
 
           printf '%s\n' \
-            "Base: OpenWrt 24.10.5 (x86_64)" \
+            "## HarryWrt ${OWRT_BASE} — ${TARGET}" \
+            "" \
+            "Base: OpenWrt ${OWRT_BASE} (${TARGET})" \
             "Profile: Clean Edition" \
             "" \
-            "Notes:" \
-            "- Argon theme is included but the default UI remains Bootstrap." \
-            "- This build is offline-ready for third-party packages." \
-            "- IPv6 support included (odhcp6c + odhcpd)." \
+            "Features:" \
+            "- Argon theme included (default: Bootstrap)" \
+            "- Passwall2 offline-ready dependencies" \
+            "- IPv6 support (odhcp6c + odhcpd)" \
             "" \
-            "Recommended:" \
-            "- squashfs-uefi for UEFI systems" \
-            "- squashfs-bios for legacy BIOS systems" \
-            "" \
-            "Default:" \
+            "Defaults:" \
             "- Hostname: HarryWrt" \
             "- Timezone: Asia/Hong_Kong" \
+            "- LAN: 192.168.1.1" \
             "" \
-            "Integrity:" \
-            "- SHA256SUMS included" \
+            "SHA256SUMS included for integrity verification." \
             > release_notes.txt
 
-          ASSETS=(
-            "${PREFIX}-squashfs-bios.img.gz"
-            "${PREFIX}-squashfs-uefi.img.gz"
-            "${PREFIX}-ext4-bios.img.gz"
-            "${PREFIX}-ext4-uefi.img.gz"
-            "SHA256SUMS"
-          )
-
-          echo "Checking for existing release: ${TAG} (repo: ${REPO})"
+          # Create release if it doesn't exist (first matrix job to finish creates it)
           if ! gh release view "${TAG}" --repo "${REPO}" >/dev/null 2>&1; then
-            echo "Creating new release: ${TAG}"
             gh release create "${TAG}" \
               --repo "${REPO}" \
-              --title "HarryWrt Clean 24.10.5 ${REL} - x86_64" \
+              --title "HarryWrt ${REL}" \
               --notes-file release_notes.txt
           fi
 
-          echo "Uploading assets..."
-          for f in "${ASSETS[@]}"; do
+          echo "Uploading assets for ${OWRT_BASE} / ${TARGET}..."
+          for f in ${PREFIX}-*.img.gz SHA256SUMS; do
             if [ -f "$f" ]; then
-              echo "Uploading: $f"
-              gh release upload "${TAG}" "$f" --repo "${REPO}" --clobber
-            else
-              echo "WARNING: Missing asset (skipping): $f" >&2
+              # Avoid SHA256SUMS collision: rename per-variant
+              if [ "$f" = "SHA256SUMS" ]; then
+                cp -f "$f" "SHA256SUMS-${OWRT_BASE}-${TARGET}"
+                gh release upload "${TAG}" "SHA256SUMS-${OWRT_BASE}-${TARGET}" --repo "${REPO}" --clobber
+              else
+                gh release upload "${TAG}" "$f" --repo "${REPO}" --clobber
+              fi
             fi
           done

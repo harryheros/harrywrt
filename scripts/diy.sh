@@ -1,41 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ============================================================
-# HarryWrt DIY Script (OpenWrt 24.10.5 / Clean)
-# - Branding (banner/motd/DISTRIB_DESCRIPTION)
-# - Default LuCI theme forced to Bootstrap (Argon remains optional)
-# - Fix Go toolchain policy for geoview: GOTOOLCHAIN=auto
-# - First boot: musl loader symlink fix
-# - First boot: dynamic procd guardian for config.apply behavior
-# ============================================================
+# =============================================================
+# HarryWrt DIY Script (Multi-version / Multi-platform)
+#
+# Usage: diy.sh <OWRT_VERSION> <TARGET>
+#   e.g. diy.sh 24.10.6 x86_64
+#        diy.sh 25.12.2 aarch64
+#
+# - Branding (banner / motd / DISTRIB_DESCRIPTION)
+# - Default LuCI theme forced to Bootstrap
+# - Go toolchain GOTOOLCHAIN=auto patch (for geoview)
+# - First boot: musl loader symlink fix (arch-aware)
+# - First boot: passwall2 guardian service
+# - NTP configuration preserved
+# =============================================================
 
-# Guard: must be run from inside the openwrt/ source directory
-if [[ "$(basename "$PWD")" != "openwrt" ]]; then
-  echo "ERROR: diy.sh must be run from within the openwrt/ directory (current: $PWD)" >&2
+HARRYWRT_VER="${1:?Usage: diy.sh <OWRT_VERSION> <TARGET>}"
+TARGET="${2:?Usage: diy.sh <OWRT_VERSION> <TARGET>}"
+
+# Guard: must be run from inside the openwrt source directory
+if [[ ! -f "Makefile" ]] || ! grep -q "TOPDIR:=" Makefile 2>/dev/null; then
+  echo "ERROR: diy.sh must be run from within the openwrt source directory (current: $PWD)" >&2
   exit 1
 fi
 
 FILES_DIR="files"
-
 mkdir -p "${FILES_DIR}/etc/config"
 mkdir -p "${FILES_DIR}/etc/uci-defaults"
 
+echo "============================================================"
+echo " HarryWrt DIY: OpenWrt ${HARRYWRT_VER} / ${TARGET}"
+echo "============================================================"
+
 # ------------------------------------------------------------
 # 0) Build-time fix: Go toolchain policy for geoview
-#
-#    Root cause: GOTOOLCHAIN=local is set in the OpenWrt golang
-#    build framework (golang-package.mk / golang-build.sh), which
-#    all Go packages inherit. geoview requires Go >= 1.24 but the
-#    system Go on ubuntu-22.04 runners is 1.23.x, so we must
-#    switch the framework to GOTOOLCHAIN=auto to allow it to
-#    download the required toolchain version at build time.
-#
-#    Strategy:
-#      1) Patch the golang framework files (primary fix)
-#      2) Also inject GOTOOLCHAIN=auto directly into geoview's
-#         Makefile as a double-insurance
-#      3) Validate with a warning-only approach (never exit 1)
+#    GOTOOLCHAIN=local → auto (allows downloading newer Go)
 # ------------------------------------------------------------
 echo "[patch] Patching GOTOOLCHAIN=local -> auto in golang framework ..."
 
@@ -57,8 +57,7 @@ for f in "${GOLANG_FRAMEWORK_FILES[@]}"; do
   fi
 done
 
-# Also scan for any remaining GOTOOLCHAIN=local in the golang lang dir
-# (covers version-specific subdirs like golang-1.23/, golang-1.24/, etc.)
+# Scan all .mk/.sh under golang lang dir
 while IFS= read -r -d '' f; do
   if grep -qE '\bGOTOOLCHAIN=local\b' "$f"; then
     sed -i -E 's/\bGOTOOLCHAIN=local\b/GOTOOLCHAIN=auto/g' "$f"
@@ -66,7 +65,7 @@ while IFS= read -r -d '' f; do
   fi
 done < <(find feeds/packages/lang/golang -type f \( -name "*.mk" -o -name "*.sh" \) -print0 2>/dev/null)
 
-# Double-insurance: inject GOTOOLCHAIN=auto into geoview Makefile directly
+# Double-insurance: inject into geoview Makefile
 GEOVIEW_MK_CANDIDATES=(
   "feeds/passwall_packages/geoview/Makefile"
   "feeds/packages/net/geoview/Makefile"
@@ -75,7 +74,6 @@ for mk in "${GEOVIEW_MK_CANDIDATES[@]}"; do
   if [ -f "$mk" ]; then
     echo "[patch] Found geoview Makefile: $mk"
     if ! grep -qE '\bGOTOOLCHAIN\b' "$mk"; then
-      # Inject after the first GO_PKG line, or at end of variable block
       sed -i '/^include.*golang-package/i export GOTOOLCHAIN=auto' "$mk"
       echo "[patch] Injected GOTOOLCHAIN=auto into: $mk"
     else
@@ -85,22 +83,25 @@ for mk in "${GEOVIEW_MK_CANDIDATES[@]}"; do
   fi
 done
 
-# Sanity check: warn (not fail) if GOTOOLCHAIN=local is still present anywhere
+# Sanity check (warn only)
 remaining=$(grep -RInE '\bGOTOOLCHAIN=local\b' feeds/packages/lang/golang 2>/dev/null || true)
 if [[ -n "$remaining" ]]; then
-  echo "[patch] WARNING: GOTOOLCHAIN=local still found in golang framework:" >&2
-  echo "$remaining" | head -n 20 >&2
-  echo "[patch] This may cause geoview build failure if Go >= 1.24 is required." >&2
+  echo "[patch] WARNING: GOTOOLCHAIN=local still found:" >&2
+  echo "$remaining" | head -n 10 >&2
 else
-  echo "[patch] Confirmed: no GOTOOLCHAIN=local remaining in golang framework."
+  echo "[patch] Confirmed: no GOTOOLCHAIN=local remaining."
 fi
 
-echo "[patch] Go toolchain patch complete."
+# ------------------------------------------------------------
+# 1) System defaults (hostname, timezone, NTP)
+#    Note: cronloglevel=7 is required for 25.12+
+# ------------------------------------------------------------
+CRONLOGLEVEL=5
+if [[ "${HARRYWRT_VER}" == 25.* ]]; then
+  CRONLOGLEVEL=7
+fi
 
-# ------------------------------------------------------------
-# 1) System defaults (hostname, timezone)
-# ------------------------------------------------------------
-cat > "${FILES_DIR}/etc/config/system" <<'EOF'
+cat > "${FILES_DIR}/etc/config/system" <<EOF
 config system
   option hostname 'HarryWrt'
   option timezone 'HKT-8'
@@ -108,95 +109,111 @@ config system
   option ttylogin '0'
   option log_proto 'stderr'
   option conloglevel '8'
-  option cronloglevel '5'
+  option cronloglevel '${CRONLOGLEVEL}'
+
+config timeserver 'ntp'
+  option enabled '1'
+  option enable_server '0'
+  list server '0.openwrt.pool.ntp.org'
+  list server '1.openwrt.pool.ntp.org'
+  list server '2.openwrt.pool.ntp.org'
+  list server '3.openwrt.pool.ntp.org'
 EOF
 
 # ------------------------------------------------------------
 # 2) SSH login banner
 # ------------------------------------------------------------
-cat > "${FILES_DIR}/etc/banner" <<'EOF'
+cat > "${FILES_DIR}/etc/banner" <<EOF
 ---------------------------------------------------------------
  _   _                           _  _   _  ____  _____
 | | | | __ _ _ __ _ __ _   _    | || | | ||  _ \|_   _|
-| |_| |/ _` | '__| '__| | | |   | || |_| || |_) | | |
+| |_| |/ _\` | '__| '__| | | |   | || |_| || |_) | | |
 |  _  | (_| | |  | |  | |_| |   |__   _  ||  _ <  | |
 |_| |_|\__,_|_|  |_|   \__, |      |_| |_||_| \_\ |_|
                        |___/
 ---------------------------------------------------------------
- HarryWrt 24.10.5 | Clean Edition | Stable Base
+ HarryWrt ${HARRYWRT_VER} | Clean Edition | ${TARGET}
  Based on OpenWrt | No Bloatware | Performance Focused
 ---------------------------------------------------------------
 EOF
 
 # ------------------------------------------------------------
-# 3) MOTD (post-login message)
+# 3) MOTD
 # ------------------------------------------------------------
-cat > "${FILES_DIR}/etc/motd" <<'EOF'
-HarryWrt 24.10.5 - Clean Edition (based on OpenWrt)
+cat > "${FILES_DIR}/etc/motd" <<EOF
+HarryWrt ${HARRYWRT_VER} - Clean Edition (based on OpenWrt) [${TARGET}]
 EOF
 
 # ------------------------------------------------------------
-# 4) UCI defaults: branding + release description
+# 4) UCI defaults: branding
 # ------------------------------------------------------------
-cat > "${FILES_DIR}/etc/uci-defaults/10-harrywrt-branding" <<'EOF'
+cat > "${FILES_DIR}/etc/uci-defaults/10-harrywrt-branding" <<EOF
 #!/bin/sh
-set -eu
-
-DESC="HarryWrt 24.10.5 Clean (based on OpenWrt)"
+DESC="HarryWrt ${HARRYWRT_VER} Clean (based on OpenWrt)"
 
 if [ -f /etc/openwrt_release ]; then
-  sed -i "s/^DISTRIB_DESCRIPTION=.*/DISTRIB_DESCRIPTION='${DESC}'/" /etc/openwrt_release 2>/dev/null || true
+  sed -i "s/^DISTRIB_DESCRIPTION=.*/DISTRIB_DESCRIPTION='\${DESC}'/" /etc/openwrt_release 2>/dev/null || true
 fi
-
 if [ -f /etc/os-release ]; then
-  sed -i "s/^PRETTY_NAME=.*/PRETTY_NAME=\"${DESC}\"/" /etc/os-release 2>/dev/null || true
+  sed -i "s/^PRETTY_NAME=.*/PRETTY_NAME=\"\${DESC}\"/" /etc/os-release 2>/dev/null || true
 fi
-
 if [ -f /usr/lib/os-release ]; then
-  sed -i "s/^PRETTY_NAME=.*/PRETTY_NAME=\"${DESC}\"/" /usr/lib/os-release 2>/dev/null || true
+  sed -i "s/^PRETTY_NAME=.*/PRETTY_NAME=\"\${DESC}\"/" /usr/lib/os-release 2>/dev/null || true
 fi
-
 exit 0
 EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/10-harrywrt-branding"
 
 # ------------------------------------------------------------
-# 5) Force LuCI default theme to Bootstrap (stock-like)
+# 5) Force LuCI default theme to Bootstrap
 # ------------------------------------------------------------
-cat > "${FILES_DIR}/etc/uci-defaults/99-force-default-theme" <<'EOF'
+cat > "${FILES_DIR}/etc/uci-defaults/50-force-default-theme" <<'EOF'
 #!/bin/sh
-set -eu
-
 if command -v uci >/dev/null 2>&1; then
   uci -q set luci.main.mediaurlbase='/luci-static/bootstrap' || true
   uci -q commit luci || true
 fi
-
 exit 0
 EOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/99-force-default-theme"
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/50-force-default-theme"
 
 # ------------------------------------------------------------
-# 6) First boot: musl loader symlink fix (runtime binary loader)
+# 6) First boot: musl loader symlink fix (arch-aware)
 # ------------------------------------------------------------
-cat > "${FILES_DIR}/etc/uci-defaults/90-musl-loader-fix" <<'EOF'
+case "${TARGET}" in
+  x86_64)   MUSL_LOADER="ld-musl-x86_64.so.1" ;;
+  aarch64)  MUSL_LOADER="ld-musl-aarch64.so.1" ;;
+  *)        MUSL_LOADER="" ;;
+esac
+
+if [[ -n "${MUSL_LOADER}" ]]; then
+cat > "${FILES_DIR}/etc/uci-defaults/90-musl-loader-fix" <<EOF
 #!/bin/sh
-set -eu
-if [ ! -L /lib/ld-musl-x86_64.so.1 ] && [ -f /lib/libc.so ]; then
-  ln -sf /lib/libc.so /lib/ld-musl-x86_64.so.1
+if [ ! -L /lib/${MUSL_LOADER} ] && [ -f /lib/libc.so ]; then
+  ln -sf /lib/libc.so /lib/${MUSL_LOADER}
 fi
 exit 0
 EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/90-musl-loader-fix"
+fi
 
 # ------------------------------------------------------------
-# 7) First boot: dynamic procd guardian (no build-time init.d files)
-#    Uses printf to avoid nested heredoc issues on BusyBox sh.
+# 7) First boot: passwall2 guardian (procd service)
+#
+#    Passwall2 has its own hotplug (98-passwall2) and init.d
+#    with START=99 + boot delay. The guardian complements this
+#    by handling config.change triggers that passwall2's own
+#    hotplug doesn't cover.
+#
+#    NOTE: We removed the old 98-passwall2-autofix script
+#    because passwall2's own init.d boot() already handles
+#    first-boot with a configurable delay.
 # ------------------------------------------------------------
-cat > "${FILES_DIR}/etc/uci-defaults/99-harrywrt-guardian" <<'EOF'
+cat > "${FILES_DIR}/etc/uci-defaults/95-harrywrt-guardian" <<'EOF'
 #!/bin/sh
-set -eu
 
+# Create the guardian init.d service using printf
+# (avoids nested heredoc issues on BusyBox ash)
 printf '%s\n' \
   '#!/bin/sh /etc/rc.common' \
   'START=99' \
@@ -208,33 +225,22 @@ printf '%s\n' \
   '}' \
   '' \
   'start_service() {' \
-  '  [ -x /etc/init.d/firewall ] && /etc/init.d/firewall reload >/dev/null 2>&1 || true' \
-  '  sleep 2' \
+  '  # Wait for firewall to be fully loaded' \
+  '  local i=0' \
+  '  while [ $i -lt 10 ]; do' \
+  '    nft list ruleset >/dev/null 2>&1 && break' \
+  '    sleep 1' \
+  '    i=$((i+1))' \
+  '  done' \
   '  [ -x /etc/init.d/passwall2 ] && /etc/init.d/passwall2 restart >/dev/null 2>&1 || true' \
   '}' \
   > /etc/init.d/harrywrt_guardian
 
 chmod 0755 /etc/init.d/harrywrt_guardian
 /etc/init.d/harrywrt_guardian enable >/dev/null 2>&1 || true
-/etc/init.d/harrywrt_guardian start  >/dev/null 2>&1 || true
 
 exit 0
 EOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/99-harrywrt-guardian"
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/95-harrywrt-guardian"
 
-# ------------------------------------------------------------
-# 8) Optional first boot kick for passwall2 (only if installed)
-# ------------------------------------------------------------
-cat > "${FILES_DIR}/etc/uci-defaults/98-passwall2-autofix" <<'EOF'
-#!/bin/sh
-if [ -x /etc/init.d/passwall2 ] && [ ! -f /etc/passwall2_init_done ]; then
-  /etc/init.d/firewall restart >/dev/null 2>&1 || true
-  sleep 2
-  /etc/init.d/passwall2 restart >/dev/null 2>&1 || true
-  touch /etc/passwall2_init_done
-fi
-exit 0
-EOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/98-passwall2-autofix"
-
-echo "DIY script executed successfully."
+echo "DIY script executed successfully for OpenWrt ${HARRYWRT_VER} / ${TARGET}."
