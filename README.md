@@ -108,25 +108,23 @@ Set a password on first login before further configuration.
 
 ## Installing Passwall2
 
+All required dependencies (xray-core, sing-box, geoview, v2ray-geoip, v2ray-geosite, tcping, etc.) are already pre-installed in HarryWrt. You only need to install the Passwall2 LuCI app itself.
+
 ### On OpenWrt 24.10.6 (opkg)
 
-```sh
-# Add passwall2 feed (if not already configured)
-echo "src/gz passwall2 https://your-feed-url/packages/x86_64/passwall2" >> /etc/opkg/customfeeds.conf
-opkg update
-opkg install luci-app-passwall2
-```
+1. Download `luci-app-passwall2_VERSION_all.ipk` from [Passwall2 Releases](https://github.com/Openwrt-Passwall/openwrt-passwall2/releases)
+2. In LuCI: System → Software → Upload Package → select the `.ipk` file → Install
+3. Refresh browser, Passwall2 appears under Services menu
 
 ### On OpenWrt 25.12.2 (apk)
 
-```sh
-# Download the .apk package from passwall2 releases
-wget https://github.com/Openwrt-Passwall/openwrt-passwall2/releases/download/VERSION/luci-app-passwall2_VERSION_all.apk
-apk add --allow-untrusted luci-app-passwall2_*.apk
-/etc/init.d/rpcd restart
-```
+1. Download `luci-app-passwall2_VERSION_all.apk` from [Passwall2 Releases](https://github.com/Openwrt-Passwall/openwrt-passwall2/releases)
+2. In LuCI: System → Software → Upload Package → select the `.apk` file → Install
+3. Refresh browser, Passwall2 appears under Services menu
 
-All required dependencies (xray-core, sing-box, geoview, etc.) are already pre-installed in HarryWrt.
+> **Note:** HarryWrt 25.12.2 has been patched to allow local package uploads without signature errors. The install experience is identical to 24.10.6 — upload and install, no SSH or command line needed.
+
+> **Important:** On 25.12.2, make sure to download the `.apk` format (not `.ipk`). The `.ipk` format is only compatible with 24.10.x.
 
 ---
 
