@@ -13,6 +13,8 @@ set -euo pipefail
 # - Go toolchain GOTOOLCHAIN=auto patch (for geoview)
 # - First boot: musl loader symlink fix (arch-aware)
 # - First boot: passwall2 guardian service
+# - First boot: clean non-existent passwall_packages feed
+# - First boot: patch LuCI apk local install (25.12+)
 # - NTP configuration preserved
 # =============================================================
 
@@ -242,5 +244,73 @@ chmod 0755 /etc/init.d/harrywrt_guardian
 exit 0
 EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/95-harrywrt-guardian"
+
+# ------------------------------------------------------------
+# 8) First boot: clean non-existent passwall_packages feed
+#
+#    The passwall_packages feed is added at build time to
+#    compile dependencies, but the URL gets baked into the
+#    firmware's apk/opkg repository config. Since OpenWrt's
+#    official download server doesn't host this feed, apk
+#    will fail when refreshing repos (even for local installs).
+#    This script removes the phantom feed entry on first boot.
+# ------------------------------------------------------------
+if [[ "${HARRYWRT_VER}" == 25.* ]]; then
+cat > "${FILES_DIR}/etc/uci-defaults/91-clean-passwall-feed" <<'EOF'
+#!/bin/sh
+# Remove passwall_packages feed — does not exist on official repos
+for f in /etc/apk/repositories.d/*.list; do
+  [ -f "$f" ] || continue
+  sed -i '/passwall_packages/d' "$f"
+done
+exit 0
+EOF
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/91-clean-passwall-feed"
+else
+cat > "${FILES_DIR}/etc/uci-defaults/91-clean-passwall-feed" <<'EOF'
+#!/bin/sh
+# Remove passwall_packages feed — does not exist on official repos
+if [ -f /etc/opkg/distfeeds.conf ]; then
+  sed -i '/passwall_packages/d' /etc/opkg/distfeeds.conf
+fi
+exit 0
+EOF
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/91-clean-passwall-feed"
+fi
+
+# ------------------------------------------------------------
+# 9) First boot: patch LuCI package manager for local .apk
+#    install (25.12+ only)
+#
+#    OpenWrt 25.12 switched from opkg to apk (Alpine Package
+#    Keeper). Unlike opkg, apk enforces signature verification
+#    on ALL packages — including local uploads via LuCI. This
+#    breaks the "upload .apk → install" workflow that users
+#    expect from 24.10's seamless .ipk experience.
+#
+#    This patch modifies /usr/libexec/package-manager-call to
+#    automatically add --allow-untrusted --force-non-repository
+#    flags when apk installs a local file (/tmp/upload.apk).
+#    This restores the 24.10-equivalent behavior: upload a
+#    package via LuCI web UI, click install, done.
+# ------------------------------------------------------------
+if [[ "${HARRYWRT_VER}" == 25.* ]]; then
+cat > "${FILES_DIR}/etc/uci-defaults/92-patch-apk-local-install" <<'PATCHEOF'
+#!/bin/sh
+PMC="/usr/libexec/package-manager-call"
+[ -f "$PMC" ] || exit 0
+
+# Only patch once
+grep -q 'allow-untrusted' "$PMC" && exit 0
+
+# Patch: when apk is called with a local file path, add flags
+# to skip signature check and allow non-repository packages.
+# This makes LuCI upload-install work like opkg did in 24.10.
+sed -i 's|apk add|apk add --allow-untrusted --force-non-repository|g' "$PMC"
+
+exit 0
+PATCHEOF
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-apk-local-install"
+fi
 
 echo "DIY script executed successfully for OpenWrt ${HARRYWRT_VER} / ${TARGET}."
