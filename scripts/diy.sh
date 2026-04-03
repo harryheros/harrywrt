@@ -15,6 +15,7 @@ set -euo pipefail
 # - First boot: passwall2 guardian service
 # - First boot: clean non-existent passwall_packages feed
 # - First boot: patch LuCI apk local install (25.12+)
+# - First boot: auto-detect repo mirror (fallback to TUNA)
 # - NTP configuration preserved
 # =============================================================
 
@@ -234,7 +235,10 @@ printf '%s\n' \
   '    sleep 1' \
   '    i=$((i+1))' \
   '  done' \
-  '  [ -x /etc/init.d/passwall2 ] && /etc/init.d/passwall2 restart >/dev/null 2>&1 || true' \
+  '  [ -x /etc/init.d/passwall2 ] && {' \
+  '    local enabled=$(uci -q get passwall2.@global[0].enabled)' \
+  '    [ "$enabled" = "1" ] && /etc/init.d/passwall2 restart >/dev/null 2>&1 || true' \
+  '  }' \
   '}' \
   > /etc/init.d/harrywrt_guardian
 
@@ -311,6 +315,54 @@ sed -i '/action="add"/a\\t\t\t\t\tcmd="$cmd --allow-untrusted --force-non-reposi
 exit 0
 PATCHEOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-apk-local-install"
+fi
+
+# ------------------------------------------------------------
+# 10) First boot: auto-detect repository mirror
+#
+#     Test connectivity to the official OpenWrt download server.
+#     If unreachable within 3 seconds, automatically switch to
+#     TUNA mirror (mirrors.tuna.tsinghua.edu.cn). This ensures
+#     a working package manager regardless of network location
+#     without hard-coding any regional preference into firmware.
+# ------------------------------------------------------------
+if [[ "${HARRYWRT_VER}" == 25.* ]]; then
+cat > "${FILES_DIR}/etc/uci-defaults/93-auto-mirror" <<'EOF'
+#!/bin/sh
+OFFICIAL="downloads.openwrt.org"
+MIRROR="mirrors.tuna.tsinghua.edu.cn/openwrt"
+
+# Test official server connectivity (3s timeout)
+if wget -q -O /dev/null --timeout=3 "https://${OFFICIAL}" 2>/dev/null; then
+  exit 0
+fi
+
+# Official unreachable — switch to mirror
+for f in /etc/apk/repositories.d/*.list; do
+  [ -f "$f" ] || continue
+  sed -i "s|${OFFICIAL}|${MIRROR}|g" "$f"
+done
+exit 0
+EOF
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/93-auto-mirror"
+else
+cat > "${FILES_DIR}/etc/uci-defaults/93-auto-mirror" <<'EOF'
+#!/bin/sh
+OFFICIAL="downloads.openwrt.org"
+MIRROR="mirrors.tuna.tsinghua.edu.cn/openwrt"
+
+# Test official server connectivity (3s timeout)
+if wget -q -O /dev/null --timeout=3 "https://${OFFICIAL}" 2>/dev/null; then
+  exit 0
+fi
+
+# Official unreachable — switch to mirror
+if [ -f /etc/opkg/distfeeds.conf ]; then
+  sed -i "s|${OFFICIAL}|${MIRROR}|g" /etc/opkg/distfeeds.conf
+fi
+exit 0
+EOF
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/93-auto-mirror"
 fi
 
 echo "DIY script executed successfully for OpenWrt ${HARRYWRT_VER} / ${TARGET}."
