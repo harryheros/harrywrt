@@ -14,8 +14,7 @@ set -euo pipefail
 # - First boot: musl loader symlink fix (arch-aware)
 # - First boot: passwall2 guardian service
 # - First boot: clean non-existent passwall_packages feed
-# - First boot: patch LuCI apk local install (25.12+)
-# - First boot: auto-detect repo mirror (fallback to TUNA)
+# - First boot: patch LuCI package manager (apk trust + mirror auto-detect)
 # - NTP configuration preserved
 # =============================================================
 
@@ -292,14 +291,17 @@ fi
 #    breaks the "upload .apk → install" workflow that users
 #    expect from 24.10's seamless .ipk experience.
 #
-#    This patch modifies /usr/libexec/package-manager-call to
-#    automatically add --allow-untrusted --force-non-repository
-#    flags when apk installs a local file (/tmp/upload.apk).
-#    This restores the 24.10-equivalent behavior: upload a
-#    package via LuCI web UI, click install, done.
+#    This patch modifies /usr/libexec/package-manager-call to:
+#    1) Add --allow-untrusted --force-non-repository for local
+#       .apk installs (restores 24.10 upload-install behavior)
+#    2) Auto-detect repo mirror on every "update" — if official
+#       server is unreachable (3s timeout), temporarily switch
+#       to TUNA mirror before refreshing. This runs each time,
+#       so it adapts to the user's actual network environment
+#       without modifying config files at first boot.
 # ------------------------------------------------------------
 if [[ "${HARRYWRT_VER}" == 25.* ]]; then
-cat > "${FILES_DIR}/etc/uci-defaults/92-patch-apk-local-install" <<'PATCHEOF'
+cat > "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager" <<'PATCHEOF'
 #!/bin/sh
 PMC="/usr/libexec/package-manager-call"
 [ -f "$PMC" ] || exit 0
@@ -307,62 +309,71 @@ PMC="/usr/libexec/package-manager-call"
 # Only patch once
 grep -q 'allow-untrusted' "$PMC" && exit 0
 
-# Patch: in the install→add case branch, append --allow-untrusted
-# and --force-non-repository to the cmd variable. This makes LuCI
-# upload-install work like opkg did in 24.10 (no signature check).
+# Patch 1: allow local .apk install without signature check
 sed -i '/action="add"/a\\t\t\t\t\tcmd="$cmd --allow-untrusted --force-non-repository"' "$PMC"
+
+# Patch 2: auto-detect mirror on "update" action
+# Insert a mirror check function and hook it into the update path.
+# We add a helper function at the top of the script, then call it
+# before apk update runs.
+sed -i '/^case "\$action" in/i\
+_harrywrt_mirror_check() {\
+  OFFICIAL="downloads.openwrt.org"\
+  MIRROR="mirrors.tuna.tsinghua.edu.cn/openwrt"\
+  # Quick connectivity test (3s timeout)\
+  if wget -q -O /dev/null --timeout=3 "https://${OFFICIAL}" 2>/dev/null; then\
+    # Official reachable — restore if previously switched\
+    for f in /etc/apk/repositories.d/*.list; do\
+      [ -f "$f" ] || continue\
+      sed -i "s|${MIRROR}|${OFFICIAL}|g" "$f"\
+    done\
+  else\
+    # Official unreachable — switch to mirror\
+    for f in /etc/apk/repositories.d/*.list; do\
+      [ -f "$f" ] || continue\
+      sed -i "s|${OFFICIAL}|${MIRROR}|g" "$f"\
+    done\
+  fi\
+}' "$PMC"
+
+# Hook the mirror check into the "update" action
+sed -i '/action="update"/a\\t\t\t\t\t_harrywrt_mirror_check' "$PMC"
 
 exit 0
 PATCHEOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-apk-local-install"
-fi
-
-# ------------------------------------------------------------
-# 10) First boot: auto-detect repository mirror
-#
-#     Test connectivity to the official OpenWrt download server.
-#     If unreachable within 3 seconds, automatically switch to
-#     TUNA mirror (mirrors.tuna.tsinghua.edu.cn). This ensures
-#     a working package manager regardless of network location
-#     without hard-coding any regional preference into firmware.
-# ------------------------------------------------------------
-if [[ "${HARRYWRT_VER}" == 25.* ]]; then
-cat > "${FILES_DIR}/etc/uci-defaults/93-auto-mirror" <<'EOF'
-#!/bin/sh
-OFFICIAL="downloads.openwrt.org"
-MIRROR="mirrors.tuna.tsinghua.edu.cn/openwrt"
-
-# Test official server connectivity (3s timeout)
-if wget -q -O /dev/null --timeout=3 "https://${OFFICIAL}" 2>/dev/null; then
-  exit 0
-fi
-
-# Official unreachable — switch to mirror
-for f in /etc/apk/repositories.d/*.list; do
-  [ -f "$f" ] || continue
-  sed -i "s|${OFFICIAL}|${MIRROR}|g" "$f"
-done
-exit 0
-EOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/93-auto-mirror"
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager"
 else
-cat > "${FILES_DIR}/etc/uci-defaults/93-auto-mirror" <<'EOF'
+# 24.10 (opkg): only need mirror auto-detect, no signature issue
+cat > "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager" <<'PATCHEOF'
 #!/bin/sh
-OFFICIAL="downloads.openwrt.org"
-MIRROR="mirrors.tuna.tsinghua.edu.cn/openwrt"
+PMC="/usr/libexec/package-manager-call"
+[ -f "$PMC" ] || exit 0
 
-# Test official server connectivity (3s timeout)
-if wget -q -O /dev/null --timeout=3 "https://${OFFICIAL}" 2>/dev/null; then
-  exit 0
-fi
+# Only patch once
+grep -q '_harrywrt_mirror_check' "$PMC" && exit 0
 
-# Official unreachable — switch to mirror
-if [ -f /etc/opkg/distfeeds.conf ]; then
-  sed -i "s|${OFFICIAL}|${MIRROR}|g" /etc/opkg/distfeeds.conf
-fi
+# Add mirror auto-detect function and hook into update
+sed -i '/^case "\$action" in/i\
+_harrywrt_mirror_check() {\
+  OFFICIAL="downloads.openwrt.org"\
+  MIRROR="mirrors.tuna.tsinghua.edu.cn/openwrt"\
+  if wget -q -O /dev/null --timeout=3 "https://${OFFICIAL}" 2>/dev/null; then\
+    if [ -f /etc/opkg/distfeeds.conf ]; then\
+      sed -i "s|${MIRROR}|${OFFICIAL}|g" /etc/opkg/distfeeds.conf\
+    fi\
+  else\
+    if [ -f /etc/opkg/distfeeds.conf ]; then\
+      sed -i "s|${OFFICIAL}|${MIRROR}|g" /etc/opkg/distfeeds.conf\
+    fi\
+  fi\
+}' "$PMC"
+
+# For opkg, hook into the "update" action in the install|update|upgrade|remove case
+sed -i '/install|update|upgrade|remove)/a\\t\t[ "$action" = "update" ] && _harrywrt_mirror_check' "$PMC"
+
 exit 0
-EOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/93-auto-mirror"
+PATCHEOF
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager"
 fi
 
 echo "DIY script executed successfully for OpenWrt ${HARRYWRT_VER} / ${TARGET}."
