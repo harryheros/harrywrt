@@ -127,12 +127,12 @@ EOF
 # ------------------------------------------------------------
 cat > "${FILES_DIR}/etc/banner" <<EOF
 ---------------------------------------------------------------
- _   _                           _  _   _  ____  _____
-| | | | __ _ _ __ _ __ _   _    | || | | ||  _ \|_   _|
-| |_| |/ _\` | '__| '__| | | |   | || |_| || |_) | | |
-|  _  | (_| | |  | |  | |_| |   |__   _  ||  _ <  | |
-|_| |_|\__,_|_|  |_|   \__, |      |_| |_||_| \_\ |_|
-                       |___/
+ _   _                          __        __     _
+| | | | __ _ _ __ _ __ _   _   \ \      / /_ __| |_
+| |_| |/ _\` | '__| '__| | | |   \ \ /\ / / '__| __|
+|  _  | (_| | |  | |  | |_| |    \ V  V /| |  | |_
+|_| |_|\__,_|_|  |_|   \__, |     \_/\_/ |_|   \__|
+                        |___/
 ---------------------------------------------------------------
  HarryWrt ${HARRYWRT_VER} | Clean Edition | ${TARGET}
  Based on OpenWrt | No Bloatware | Performance Focused
@@ -303,10 +303,10 @@ PMC="/usr/libexec/package-manager-call"
 # Only patch once
 grep -q 'allow-untrusted' "$PMC" && exit 0
 
-# Patch: when apk is called with a local file path, add flags
-# to skip signature check and allow non-repository packages.
-# This makes LuCI upload-install work like opkg did in 24.10.
-sed -i 's|apk add|apk add --allow-untrusted --force-non-repository|g' "$PMC"
+# Patch: in the install→add case branch, append --allow-untrusted
+# and --force-non-repository to the cmd variable. This makes LuCI
+# upload-install work like opkg did in 24.10 (no signature check).
+sed -i '/action="add"/a\\t\t\t\t\tcmd="$cmd --allow-untrusted --force-non-repository"' "$PMC"
 
 exit 0
 PATCHEOF
