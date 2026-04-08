@@ -4,9 +4,11 @@
 [![Platform](https://img.shields.io/badge/platform-x86__64%20%7C%20aarch64-orange.svg)](#)
 [![Base](https://img.shields.io/badge/base-OpenWrt%2024.10.6%20%7C%2025.12.2-green.svg)](#)
 
-HarryWrt is a clean, stable, and extensible firmware based on official OpenWrt.
+HarryWrt is a clean, stable, and extensible OpenWrt-based firmware focused on minimalism, stability, and upstream compatibility.
 
 Designed for users who want a minimal, reliable system with practical defaults and strong compatibility with upstream packages.
+
+No bloat, no lock-in, no surprises — just a predictable and maintainable OpenWrt experience.
 
 ---
 
@@ -156,7 +158,9 @@ HarryWrt is provided as-is without warranty. This firmware contains no telemetry
 
 ## License
 
-HarryWrt follows the OpenWrt licensing model (GPL-2.0).
+HarryWrt follows the OpenWrt licensing model and is distributed under GPL-2.0.
+
+All modifications and distributed binaries comply with upstream OpenWrt licensing requirements.
 
 ---
 
