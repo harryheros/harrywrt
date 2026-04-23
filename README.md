@@ -176,3 +176,6 @@ All modifications and distributed binaries comply with upstream OpenWrt licensin
 ## Author
 
 Maintained by: harryheros
+---
+
+Part of the [Nova infrastructure toolkit](https://github.com/harryheros).
