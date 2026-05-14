@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # =============================================================
-# HarryWrt DIY Script (Multi-version / Multi-platform)
+# HarryWrt DIY Script (Multi-version / Multi-platform / Multi-profile)
 #
-# Usage: diy.sh <OWRT_VERSION> <TARGET>
-#   e.g. diy.sh 24.10.6 x86_64
-#        diy.sh 25.12.2 aarch64
+# Usage: diy.sh <OWRT_VERSION> <TARGET> [PROFILE]
+#   e.g. diy.sh 24.10.6 x86_64 clean
+#        diy.sh 25.12.2 aarch64 plus
 #
 # - Branding (banner / motd / DISTRIB_DESCRIPTION)
 # - Default LuCI theme forced to Bootstrap
@@ -16,10 +16,13 @@ set -euo pipefail
 # - First boot: clean non-existent passwall_packages feed
 # - First boot: patch LuCI package manager (apk trust + mirror auto-detect)
 # - NTP configuration preserved
+# - [plus only] AdGuard Home DNS handoff (dnsmasq -> port 5353)
+# - [plus only] UPnP disabled by default
 # =============================================================
 
-HARRYWRT_VER="${1:?Usage: diy.sh <OWRT_VERSION> <TARGET>}"
-TARGET="${2:?Usage: diy.sh <OWRT_VERSION> <TARGET>}"
+HARRYWRT_VER="${1:?Usage: diy.sh <OWRT_VERSION> <TARGET> [PROFILE]}"
+TARGET="${2:?Usage: diy.sh <OWRT_VERSION> <TARGET> [PROFILE]}"
+PROFILE="${3:-clean}"
 
 # Guard: must be run from inside the openwrt source directory
 if [[ ! -f "Makefile" ]] || ! grep -q "TOPDIR:=" Makefile 2>/dev/null; then
@@ -32,8 +35,14 @@ mkdir -p "${FILES_DIR}/etc/config"
 mkdir -p "${FILES_DIR}/etc/uci-defaults"
 
 echo "============================================================"
-echo " HarryWrt DIY: OpenWrt ${HARRYWRT_VER} / ${TARGET}"
+echo " HarryWrt DIY: OpenWrt ${HARRYWRT_VER} / ${TARGET} / ${PROFILE}"
 echo "============================================================"
+
+# Derive human-readable edition label
+case "${PROFILE}" in
+  plus)  EDITION="Plus" ;;
+  *)     EDITION="Clean" ;;
+esac
 
 # ------------------------------------------------------------
 # 0) Build-time fix: Go toolchain policy for geoview
@@ -134,7 +143,7 @@ cat > "${FILES_DIR}/etc/banner" <<EOF
 |_| |_|\__,_|_|  |_|   \__, |     \_/\_/ |_|   \__|
                         |___/
 ---------------------------------------------------------------
- HarryWrt ${HARRYWRT_VER} | Clean Edition | ${TARGET}
+ HarryWrt ${HARRYWRT_VER} | ${EDITION} Edition | ${TARGET}
  Based on OpenWrt | No Bloatware | Performance Focused
 ---------------------------------------------------------------
 EOF
@@ -143,7 +152,7 @@ EOF
 # 3) MOTD
 # ------------------------------------------------------------
 cat > "${FILES_DIR}/etc/motd" <<EOF
-HarryWrt ${HARRYWRT_VER} - Clean Edition (based on OpenWrt) [${TARGET}]
+HarryWrt ${HARRYWRT_VER} - ${EDITION} Edition (based on OpenWrt) [${TARGET}]
 EOF
 
 # ------------------------------------------------------------
@@ -151,7 +160,7 @@ EOF
 # ------------------------------------------------------------
 cat > "${FILES_DIR}/etc/uci-defaults/10-harrywrt-branding" <<EOF
 #!/bin/sh
-DESC="HarryWrt ${HARRYWRT_VER} Clean (based on OpenWrt)"
+DESC="HarryWrt ${HARRYWRT_VER} ${EDITION} (based on OpenWrt)"
 
 if [ -f /etc/openwrt_release ]; then
   sed -i "s/^DISTRIB_DESCRIPTION=.*/DISTRIB_DESCRIPTION='\${DESC}'/" /etc/openwrt_release 2>/dev/null || true
@@ -376,4 +385,24 @@ PATCHEOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager"
 fi
 
-echo "DIY script executed successfully for OpenWrt ${HARRYWRT_VER} / ${TARGET}."
+# ------------------------------------------------------------
+# 10) [Plus only] AdGuard Home DNS handoff
+#     Move dnsmasq to port 5353; AdGuard Home takes port 53.
+#     UPnP is installed but left disabled — user opts in via LuCI.
+# ------------------------------------------------------------
+if [[ "${PROFILE}" == "plus" ]]; then
+
+cat > "${FILES_DIR}/etc/uci-defaults/60-adguardhome-dns" <<'EOF'
+#!/bin/sh
+# Move dnsmasq off port 53 so AdGuard Home can bind it.
+# AdGuard Home is configured separately via its own Web UI
+# at http://192.168.1.1:3000 on first run.
+uci -q set dhcp.@dnsmasq[0].port=5353
+uci -q commit dhcp
+exit 0
+EOF
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/60-adguardhome-dns"
+
+fi
+
+echo "DIY script executed successfully for OpenWrt ${HARRYWRT_VER} / ${TARGET} / ${PROFILE}."

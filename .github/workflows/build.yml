@@ -1,7 +1,7 @@
 # =============================================================
-# HarryWrt — Multi-version, Multi-platform Build (matrix)
+# HarryWrt — Multi-version, Multi-platform, Multi-profile Build (matrix)
 #
-# Matrix: OpenWrt 24.10.6 + 25.12.2 × x86_64 + aarch64
+# Matrix: OpenWrt 24.10.6 + 25.12.2 × x86_64 + aarch64 × clean + plus
 # =============================================================
 name: Build HarryWrt
 
@@ -17,7 +17,7 @@ on:
         required: false
         default: "false"
       build_filter:
-        description: "Build filter (all / 24.10 / 25.12 / x86_64 / aarch64)"
+        description: "Build filter (all / 24.10 / 25.12 / x86_64 / aarch64 / clean / plus)"
         required: false
         default: "all"
   push:
@@ -40,10 +40,14 @@ jobs:
           filter="${{ github.event.inputs.build_filter || 'all' }}"
 
           all='[
-            {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"x86_64","arch":"x86/64","config":"x86_64","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"aarch64","arch":"armsr/armv8","config":"aarch64","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"x86_64","arch":"x86/64","config":"x86_64","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"aarch64","arch":"armsr/armv8","config":"aarch64","runner":"ubuntu-24.04"}
+            {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"clean","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"clean","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"clean","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"clean","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"plus","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"plus","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"plus","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"plus","runner":"ubuntu-24.04"}
           ]'
 
           case "$filter" in
@@ -51,6 +55,8 @@ jobs:
             25.12)    matrix=$(echo "$all" | jq -c '[.[] | select(.owrt_base | startswith("25."))]') ;;
             x86_64)   matrix=$(echo "$all" | jq -c '[.[] | select(.target == "x86_64")]') ;;
             aarch64)  matrix=$(echo "$all" | jq -c '[.[] | select(.target == "aarch64")]') ;;
+            clean)    matrix=$(echo "$all" | jq -c '[.[] | select(.profile == "clean")]') ;;
+            plus)     matrix=$(echo "$all" | jq -c '[.[] | select(.profile == "plus")]') ;;
             *)        matrix=$(echo "$all" | jq -c '.') ;;
           esac
 
@@ -72,7 +78,7 @@ jobs:
       TARGET:    ${{ matrix.target }}
       ARCH_PATH: ${{ matrix.arch }}
       CONFIG:    ${{ matrix.config }}
-      PROFILE:   "clean"
+      PROFILE:   ${{ matrix.profile }}
 
     steps:
       - name: Checkout repository
@@ -175,13 +181,13 @@ jobs:
           set -euo pipefail
           cd openwrt
 
-          # Select config by target
-          cp "${GITHUB_WORKSPACE}/configs/${CONFIG}-clean.config" .config
+          # Select config by target and profile
+          cp "${GITHUB_WORKSPACE}/configs/${CONFIG}-${PROFILE}.config" .config
           echo "CONFIG_CCACHE=y" >> .config
 
-          # Run DIY script (auto-detects target from .config)
+          # Run DIY script
           chmod +x "${GITHUB_WORKSPACE}/scripts/diy.sh"
-          bash "${GITHUB_WORKSPACE}/scripts/diy.sh" "${OWRT_BASE}" "${TARGET}" 2>&1 | tee -a build.log
+          bash "${GITHUB_WORKSPACE}/scripts/diy.sh" "${OWRT_BASE}" "${TARGET}" "${PROFILE}" 2>&1 | tee -a build.log
 
           make defconfig 2>&1 | tee -a build.log
 
@@ -307,7 +313,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Log-${{ env.OWRT_BASE }}-${{ env.TARGET }}-${{ steps.meta.outputs.release }}
+          name: Log-${{ env.OWRT_BASE }}-${{ env.PROFILE }}-${{ env.TARGET }}-${{ steps.meta.outputs.release }}
           path: openwrt/build.log
 
       - name: Upload firmware artifacts
@@ -334,16 +340,38 @@ jobs:
 
           PREFIX="HarryWrt-${OWRT_BASE}-${PROFILE}-${REL}-${TARGET}"
 
+          # Generate release notes based on profile
+          if [[ "${PROFILE}" == "plus" ]]; then
+            EDITION_LABEL="Plus Edition"
+            FEATURES=$(printf '%s\n' \
+              "- Argon theme included (default: Bootstrap)" \
+              "- Passwall2 offline-ready dependencies" \
+              "- AdGuard Home (DNS on port 53; dnsmasq on port 5353)" \
+              "- WireGuard VPN (wireguard-tools + luci-app-wireguard)" \
+              "- DDNS (Cloudflare + No-IP scripts)" \
+              "- UPnP / NAT-PMP (miniupnpd-nftables, disabled by default)" \
+              "- Threat blocking (banip + luci-app-banip)" \
+              "- Traffic monitoring (nlbwmon)" \
+              "- System statistics (collectd + luci-app-statistics)" \
+              "- Multi-WAN load balancing (mwan3)" \
+              "- Wake-on-LAN" \
+              "- IPv6 support (odhcp6c + odhcpd)")
+          else
+            EDITION_LABEL="Clean Edition"
+            FEATURES=$(printf '%s\n' \
+              "- Argon theme included (default: Bootstrap)" \
+              "- Passwall2 offline-ready dependencies" \
+              "- IPv6 support (odhcp6c + odhcpd)")
+          fi
+
           printf '%s\n' \
-            "## HarryWrt ${OWRT_BASE} — ${TARGET}" \
+            "## HarryWrt ${OWRT_BASE} — ${TARGET} — ${EDITION_LABEL}" \
             "" \
             "Base: OpenWrt ${OWRT_BASE} (${TARGET})" \
-            "Profile: Clean Edition" \
+            "Profile: ${EDITION_LABEL}" \
             "" \
             "Features:" \
-            "- Argon theme included (default: Bootstrap)" \
-            "- Passwall2 offline-ready dependencies" \
-            "- IPv6 support (odhcp6c + odhcpd)" \
+            "${FEATURES}" \
             "" \
             "Defaults:" \
             "- Hostname: HarryWrt" \
@@ -366,8 +394,8 @@ jobs:
             if [ -f "$f" ]; then
               # Avoid SHA256SUMS collision: rename per-variant
               if [ "$f" = "SHA256SUMS" ]; then
-                cp -f "$f" "SHA256SUMS-${OWRT_BASE}-${TARGET}"
-                gh release upload "${TAG}" "SHA256SUMS-${OWRT_BASE}-${TARGET}" --repo "${REPO}" --clobber
+                cp -f "$f" "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}"
+                gh release upload "${TAG}" "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}" --repo "${REPO}" --clobber
               else
                 gh release upload "${TAG}" "$f" --repo "${REPO}" --clobber
               fi
