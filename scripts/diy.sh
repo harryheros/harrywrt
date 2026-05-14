@@ -134,6 +134,12 @@ EOF
 # ------------------------------------------------------------
 # 2) SSH login banner
 # ------------------------------------------------------------
+if [[ "${PROFILE}" == "plus" ]]; then
+  AGH_BANNER_LINE=" AdGuard Home: http://192.168.1.1:3000 (admin/harrywrt)"$'\n'" Change default password after first login!"$'\n'"---------------------------------------------------------------"
+else
+  AGH_BANNER_LINE=""
+fi
+
 cat > "${FILES_DIR}/etc/banner" <<EOF
 ---------------------------------------------------------------
  _   _                          __        __     _
@@ -146,11 +152,7 @@ cat > "${FILES_DIR}/etc/banner" <<EOF
  HarryWrt ${HARRYWRT_VER} | ${EDITION} Edition | ${TARGET}
  Based on OpenWrt | No Bloatware | Performance Focused
 ---------------------------------------------------------------
-$(if [[ "${PROFILE}" == "plus" ]]; then
-echo " AdGuard Home: http://192.168.1.1:3000 (admin/harrywrt)"
-echo " Change default password after first login!"
-echo "---------------------------------------------------------------"
-fi)
+${AGH_BANNER_LINE}
 EOF
 
 # ------------------------------------------------------------
@@ -402,13 +404,17 @@ fi
 if [[ "${PROFILE}" == "plus" ]]; then
 
 # Generate bcrypt hash for default password 'harrywrt' at build time
-# GitHub Actions runners have apache2-utils (htpasswd) available
-if command -v htpasswd >/dev/null 2>&1; then
-  AGH_PASS_HASH=$(htpasswd -bnBC 10 "" harrywrt | tr -d ':\n' | sed 's/^://')
-else
-  # Pre-computed bcrypt cost=10 hash for 'harrywrt'
-  AGH_PASS_HASH='$2a$10$YhsNMdveSiGEWBKmSHYFxeAaGQxT0K0iQqhNaOW5KMjkLg9JTL7dC'
+# apache2-utils (htpasswd) is installed in the CI apt step
+if ! command -v htpasswd >/dev/null 2>&1; then
+  echo "[adguardhome] ERROR: htpasswd not found. Install apache2-utils." >&2
+  exit 1
 fi
+AGH_PASS_HASH=$(htpasswd -bnBC 10 admin harrywrt | cut -d: -f2 | tr -d '\n')
+if [[ -z "${AGH_PASS_HASH}" ]]; then
+  echo "[adguardhome] ERROR: htpasswd returned empty hash" >&2
+  exit 1
+fi
+echo "[adguardhome] Password hash generated successfully"
 mkdir -p "${FILES_DIR}/etc/adguardhome"
 cat > "${FILES_DIR}/etc/adguardhome/adguardhome.yaml" <<'EOF'
 http:
@@ -627,33 +633,52 @@ exit 0
 EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/60-adguardhome-dns"
 
-# LuCI controller for AdGuard Home — dynamic redirect (follows LAN IP)
-mkdir -p "${FILES_DIR}/usr/lib/lua/luci/controller"
-cat > "${FILES_DIR}/usr/lib/lua/luci/controller/adguardhome.lua" <<'EOF'
-module("luci.controller.adguardhome", package.seeall)
-
-function index()
-    entry({"admin", "services", "adguardhome"},
-        call("redirect_adg"), _("AdGuard Home"), 60)
-end
-
-function redirect_adg()
-    local http = require "luci.http"
-    local host = http.getenv("HTTP_HOST") or http.getenv("SERVER_NAME") or "192.168.1.1"
-    -- Strip port if present, use only hostname
-    host = host:match("^([^:]+)") or host
-    http.redirect("http://" .. host .. ":3000")
-end
+# LuCI AdGuard Home entry — modern ucode view (24.10+ compatible)
+# Uses a JS view that redirects to port 3000 using current hostname
+mkdir -p "${FILES_DIR}/usr/share/luci/menu.d"
+cat > "${FILES_DIR}/usr/share/luci/menu.d/adguardhome.json" <<'EOF'
+{
+  "admin/services/adguardhome": {
+    "title": "AdGuard Home",
+    "order": 60,
+    "action": {
+      "type": "view",
+      "path": "adguardhome/redirect"
+    }
+  }
+}
 EOF
 
-# Clear LuCI cache so the new controller is picked up on first boot
-mkdir -p "${FILES_DIR}/etc/uci-defaults"
-cat > "${FILES_DIR}/etc/uci-defaults/61-luci-adguardhome-cache" <<'EOF'
-#!/bin/sh
-rm -rf /tmp/luci-*
-exit 0
+mkdir -p "${FILES_DIR}/www/luci-static/resources/view/adguardhome"
+cat > "${FILES_DIR}/www/luci-static/resources/view/adguardhome/redirect.js" <<'EOF'
+'use strict';
+'require view';
+
+return view.extend({
+    render: function() {
+        var host = window.location.hostname;
+        var url = 'http://' + host + ':3000';
+        var btn = E('a', {
+            'href': url,
+            'target': '_blank',
+            'rel': 'noopener noreferrer',
+            'style': 'display:inline-block;margin-top:1em;padding:0.5em 1.2em;background:#367fa9;color:#fff;text-decoration:none;border-radius:4px;font-size:1em;'
+        }, 'Open AdGuard Home');
+        return E('div', { 'style': 'padding:1em;' }, [
+            E('h2', {}, 'AdGuard Home'),
+            E('p', {}, 'AdGuard Home runs on port 3000. Click the button below to open it in a new tab.'),
+            E('p', {}, [ E('code', {}, url) ]),
+            btn
+        ]);
+    },
+    handleSaveApply: null,
+    handleSave: null,
+    handleReset: null
+});
 EOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/61-luci-adguardhome-cache"
+
+# Remove old Lua controller if present
+rm -f "${FILES_DIR}/usr/lib/lua/luci/controller/adguardhome.lua"
 
 fi
 

@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-GPLv2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Platform](https://img.shields.io/badge/platform-x86__64%20%7C%20aarch64-orange.svg)](#)
-[![Base](https://img.shields.io/badge/base-OpenWrt%2024.10.6%20%7C%2025.12.2-green.svg)](#)
+[![Base](https://img.shields.io/badge/base-OpenWrt%2024.10.6%20%7C%2025.12.4-green.svg)](#)
 
 HarryWrt is a stable, extensible OpenWrt-based firmware available in two profiles: **Clean** for minimalism and upstream compatibility, and **Plus** for users who want a full-featured primary router experience out of the box.
 
@@ -38,7 +38,7 @@ Full-featured primary router firmware. Everything in Clean, plus:
 
 ## Shared Features
 
-- Dual OpenWrt version support (24.10.6 LTS + 25.12.2 stable)
+- Dual OpenWrt version support (24.10.6 LTS + 25.12.4 stable)
 - Dual platform support (x86_64 + aarch64 ARM64)
 - Modern firewall stack (nftables / fw4)
 - Built and released automatically via GitHub Actions
@@ -51,12 +51,12 @@ Full-featured primary router firmware. Everything in Clean, plus:
 |---------|---------|----------|--------|-----------------|--------|
 | 24.10.6 | Clean   | x86_64   | 768MB  | opkg            | LTS (EOL Sep 2026) |
 | 24.10.6 | Clean   | aarch64  | 512MB  | opkg            | LTS (EOL Sep 2026) |
-| 25.12.2 | Clean   | x86_64   | 768MB  | apk             | Current Stable |
-| 25.12.2 | Clean   | aarch64  | 512MB  | apk             | Current Stable |
+| 25.12.4 | Clean   | x86_64   | 768MB  | apk             | Current Stable |
+| 25.12.4 | Clean   | aarch64  | 512MB  | apk             | Current Stable |
 | 24.10.6 | Plus    | x86_64   | 1024MB | opkg            | LTS (EOL Sep 2026) |
 | 24.10.6 | Plus    | aarch64  | 768MB  | opkg            | LTS (EOL Sep 2026) |
-| 25.12.2 | Plus    | x86_64   | 1024MB | apk             | Current Stable |
-| 25.12.2 | Plus    | aarch64  | 768MB  | apk             | Current Stable |
+| 25.12.4 | Plus    | x86_64   | 1024MB | apk             | Current Stable |
+| 25.12.4 | Plus    | aarch64  | 768MB  | apk             | Current Stable |
 
 ### Which profile should I choose?
 
@@ -68,7 +68,7 @@ Full-featured primary router firmware. Everything in Clean, plus:
 
 **24.10.6** — If you have an existing opkg-based setup with many installed packages and want a stable, familiar upgrade path. Will receive security fixes until September 2026.
 
-**25.12.2** — Recommended for new installations. Uses the new apk package manager (replaces opkg). Better performance, latest security patches, and long-term support.
+**25.12.4** — Recommended for new installations. Uses the new apk package manager (replaces opkg). Better performance, latest security patches, and long-term support.
 
 ### Which platform?
 
@@ -183,15 +183,15 @@ All required dependencies (xray-core, sing-box, geoview, v2ray-geoip, v2ray-geos
 2. In LuCI: System → Software → Upload Package → select the `.ipk` file → Install
 3. Refresh browser, Passwall2 appears under Services menu
 
-### On OpenWrt 25.12.2 (apk)
+### On OpenWrt 25.12.4 (apk)
 
 1. Download `luci-app-passwall2_VERSION_all.apk` from [Passwall2 Releases](https://github.com/Openwrt-Passwall/openwrt-passwall2/releases)
 2. In LuCI: System → Software → Upload Package → select the `.apk` file → Install
 3. Refresh browser, Passwall2 appears under Services menu
 
-> **Note:** HarryWrt 25.12.2 has been patched to allow local package uploads without signature errors. The install experience is identical to 24.10.6 — upload and install, no SSH or command line needed.
+> **Note:** HarryWrt 25.12.4 has been patched to allow local package uploads without signature errors. The install experience is identical to 24.10.6 — upload and install, no SSH or command line needed.
 
-> **Important:** On 25.12.2, make sure to download the `.apk` format (not `.ipk`). The `.ipk` format is only compatible with 24.10.x.
+> **Important:** On 25.12.4, make sure to download the `.apk` format (not `.ipk`). The `.ipk` format is only compatible with 24.10.x.
 
 ---
 

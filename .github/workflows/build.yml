@@ -1,7 +1,7 @@
 # =============================================================
 # HarryWrt — Multi-version, Multi-platform, Multi-profile Build (matrix)
 #
-# Matrix: OpenWrt 24.10.6 + 25.12.2 × x86_64 + aarch64 × clean + plus
+# Matrix: OpenWrt 24.10.6 + 25.12.4 × x86_64 + aarch64 × clean + plus
 # =============================================================
 name: Build HarryWrt
 
@@ -45,12 +45,12 @@ jobs:
           all='[
             {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"clean","runner":"ubuntu-24.04"},
             {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"clean","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"clean","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"clean","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v25.12.4","owrt_base":"25.12.4","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"clean","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v25.12.4","owrt_base":"25.12.4","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"clean","runner":"ubuntu-24.04"},
             {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"plus","runner":"ubuntu-24.04"},
             {"owrt_tag":"v24.10.6","owrt_base":"24.10.6","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"plus","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"plus","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.2","owrt_base":"25.12.2","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"plus","runner":"ubuntu-24.04"}
+            {"owrt_tag":"v25.12.4","owrt_base":"25.12.4","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"plus","runner":"ubuntu-24.04"},
+            {"owrt_tag":"v25.12.4","owrt_base":"25.12.4","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"plus","runner":"ubuntu-24.04"}
           ]'
 
           case "$filter" in
@@ -349,7 +349,7 @@ jobs:
             FEATURES=$(printf '%s\n' \
               "- Argon theme included (default: Bootstrap)" \
               "- Passwall2 offline-ready dependencies" \
-              "- AdGuard Home (DNS on port 53; dnsmasq on port 5353)" \
+              "- AdGuard Home (DNS port 53; dnsmasq port 5353; Web UI port 3000; default: admin/harrywrt)" \
               "- WireGuard VPN (wireguard-tools + luci-app-wireguard)" \
               "- DDNS (Cloudflare + No-IP scripts)" \
               "- UPnP / NAT-PMP (miniupnpd-nftables, disabled by default)" \
@@ -368,15 +368,32 @@ jobs:
           fi
 
           printf '%s\n' \
-            "## HarryWrt ${OWRT_BASE} — ${TARGET} — ${EDITION_LABEL}" \
+            "## HarryWrt ${REL} — ${EDITION_LABEL}" \
             "" \
-            "Base: OpenWrt ${OWRT_BASE} (${TARGET})" \
-            "Profile: ${EDITION_LABEL}" \
+            "### Available Builds" \
             "" \
-            "Features:" \
+            "| OpenWrt | Profile | Platform | Filesystem | File |" \
+            "|---------|---------|----------|------------|------|" \
+            "| 24.10.6 | Clean | x86_64 | squashfs (UEFI) | HarryWrt-24.10.6-clean-${REL}-x86_64-squashfs-uefi.img.gz |" \
+            "| 24.10.6 | Clean | x86_64 | ext4 (UEFI) | HarryWrt-24.10.6-clean-${REL}-x86_64-ext4-uefi.img.gz |" \
+            "| 24.10.6 | Clean | aarch64 | squashfs | HarryWrt-24.10.6-clean-${REL}-aarch64-*.img.gz |" \
+            "| 24.10.6 | Plus | x86_64 | squashfs (UEFI) | HarryWrt-24.10.6-plus-${REL}-x86_64-squashfs-uefi.img.gz |" \
+            "| 24.10.6 | Plus | x86_64 | ext4 (UEFI) | HarryWrt-24.10.6-plus-${REL}-x86_64-ext4-uefi.img.gz |" \
+            "| 24.10.6 | Plus | aarch64 | squashfs | HarryWrt-24.10.6-plus-${REL}-aarch64-*.img.gz |" \
+            "| 25.12.4 | Clean | x86_64 | squashfs (UEFI) | HarryWrt-25.12.4-clean-${REL}-x86_64-squashfs-uefi.img.gz |" \
+            "| 25.12.4 | Clean | x86_64 | ext4 (UEFI) | HarryWrt-25.12.4-clean-${REL}-x86_64-ext4-uefi.img.gz |" \
+            "| 25.12.4 | Clean | aarch64 | squashfs | HarryWrt-25.12.4-clean-${REL}-aarch64-*.img.gz |" \
+            "| 25.12.4 | Plus | x86_64 | squashfs (UEFI) | HarryWrt-25.12.4-plus-${REL}-x86_64-squashfs-uefi.img.gz |" \
+            "| 25.12.4 | Plus | x86_64 | ext4 (UEFI) | HarryWrt-25.12.4-plus-${REL}-x86_64-ext4-uefi.img.gz |" \
+            "| 25.12.4 | Plus | aarch64 | squashfs | HarryWrt-25.12.4-plus-${REL}-aarch64-*.img.gz |" \
+            "" \
+            "> **Recommended for new installs:** 25.12.4 (apk) · For existing opkg setups: 24.10.6" \
+            "> **VM/PVE users:** use ext4-uefi image" \
+            "" \
+            "### ${EDITION_LABEL} Features" \
             "${FEATURES}" \
             "" \
-            "Defaults:" \
+            "### Defaults" \
             "- Hostname: HarryWrt" \
             "- Timezone: Asia/Hong_Kong" \
             "- LAN: 192.168.1.1" \
