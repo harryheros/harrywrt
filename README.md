@@ -68,13 +68,13 @@ Full-featured primary router firmware. Everything in Clean, plus:
 
 **24.10.6** — If you have an existing opkg-based setup with many installed packages and want a stable, familiar upgrade path. Will receive security fixes until September 2026.
 
-**25.12.4** — Recommended for new installations. Uses the new apk package manager (replaces opkg). Better performance, latest security patches, and long-term support.
+**25.12.4** — Recommended for new installations. Uses the new apk package manager (replaces opkg). Better performance and latest security patches.
 
 ### Which platform?
 
 **x86_64** — For soft routers, PCs, virtual machines (Proxmox/ESXi/QEMU), industrial mini-PCs.
 
-**aarch64 (armsr/armv8)** — Generic ARM64 UEFI image. Works with NanoPi R2S/R4S/R5S/R6S, Raspberry Pi 4/5, and other ARM64 devices that support UEFI boot. For device-specific optimizations, consider using dedicated target images.
+**aarch64 (armsr/armv8)** — Generic ARM64 UEFI image. Works with NanoPi R4S/R5S/R6S, Raspberry Pi 4/5, and other ARM64 devices that support UEFI boot. Note: NanoPi R2S uses arm32 and is not compatible with this image. For device-specific optimizations, consider using dedicated target images.
 
 ---
 
@@ -123,7 +123,7 @@ Pre-installed dependencies: xray-core, sing-box, geoview, v2ray-geoip, v2ray-geo
 
 | Component | Package(s) | Notes |
 |-----------|-----------|-------|
-| AdGuard Home | adguardhome | DNS on port 53; dnsmasq on port 5353; management UI at port 3000; DoH upstreams via IP (1.1.1.1 / 8.8.8.8); default credentials admin/harrywrt |
+| AdGuard Home | adguardhome | DNS on port 53; dnsmasq on port 5353; management UI at port 3000; upstream DNS via DoH over IP (https://1.1.1.1/dns-query, https://8.8.8.8/dns-query); default credentials admin/harrywrt |
 | WireGuard VPN | kmod-wireguard, wireguard-tools, luci-app-wireguard, qrencode | QR code peer export supported |
 | DDNS | ddns-scripts, luci-app-ddns, ddns-scripts-cloudflare, ddns-scripts-noip | Disabled by default |
 | UPnP / NAT-PMP | miniupnpd-nftables, luci-app-upnp | Disabled by default; enable via LuCI |
@@ -157,7 +157,9 @@ Set a password on first login before further configuration.
 
 ### AdGuard Home (Plus only)
 
-AdGuard Home starts automatically on first boot and is accessible at http://192.168.1.1:3000
+AdGuard Home starts automatically on first boot and is accessible at `http://<router-ip>:3000` (default: http://192.168.1.1:3000)
+
+> AdGuard Home uses HTTP only. If you access LuCI via HTTPS, open AdGuard Home directly in a new browser tab using `http://` — do not use `https://`.
 
 Default credentials:
 - Username: `admin`
@@ -165,9 +167,9 @@ Default credentials:
 
 **Change your password after first login** via Settings → General Settings → Account.
 
-The management UI is also accessible via Services → AdGuard Home in LuCI.
+In LuCI, go to Services → AdGuard Home to open a page with a direct link to the management UI. Clicking the link opens AdGuard Home in a new tab.
 
-DNS filtering rules (AdGuard DNS filter, AdAway) are pre-loaded but disabled by default. Enable them in the AdGuard Home UI under Filters → DNS blocklists.
+DNS filtering rules (AdGuard DNS filter, AdAway) are pre-loaded but disabled by default. Enable them under Filters → DNS blocklists.
 
 > If you change the AdGuard Home port, access it directly via the new port. The LuCI menu entry always points to port 3000.
 
@@ -210,11 +212,17 @@ LuCI → System → System → Language and Style → Theme → Argon
 Each release includes SHA256 checksum files. Always verify downloaded images before use:
 
 ```sh
-# Clean edition
+# 24.10.6 Clean
 sha256sum -c SHA256SUMS-24.10.6-clean-x86_64
 
-# Plus edition
+# 24.10.6 Plus
 sha256sum -c SHA256SUMS-24.10.6-plus-x86_64
+
+# 25.12.4 Clean
+sha256sum -c SHA256SUMS-25.12.4-clean-x86_64
+
+# 25.12.4 Plus
+sha256sum -c SHA256SUMS-25.12.4-plus-x86_64
 ```
 
 ---
