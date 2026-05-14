@@ -159,7 +159,13 @@ Set a password on first login before further configuration.
 
 AdGuard Home starts automatically on first boot and is accessible at http://192.168.1.1:3000
 
-No password is set by default — consistent with LuCI behavior. The management UI is also accessible via Services → AdGuard Home in LuCI.
+Default credentials:
+- Username: `admin`
+- Password: `harrywrt`
+
+**Change your password after first login** via Settings → General Settings → Account.
+
+The management UI is also accessible via Services → AdGuard Home in LuCI.
 
 DNS filtering rules (AdGuard DNS filter, AdAway) are pre-loaded but disabled by default. Enable them in the AdGuard Home UI under Filters → DNS blocklists.
 

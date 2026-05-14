@@ -131,7 +131,7 @@ jobs:
             file wget curl ca-certificates time \
             python3 python3-setuptools python3-pyelftools \
             gperf swig subversion mercurial \
-            ccache jq
+            ccache jq apache2-utils
 
       - name: Setup ccache
         uses: actions/cache@v4

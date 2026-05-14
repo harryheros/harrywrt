@@ -146,6 +146,11 @@ cat > "${FILES_DIR}/etc/banner" <<EOF
  HarryWrt ${HARRYWRT_VER} | ${EDITION} Edition | ${TARGET}
  Based on OpenWrt | No Bloatware | Performance Focused
 ---------------------------------------------------------------
+$(if [[ "${PROFILE}" == "plus" ]]; then
+echo " AdGuard Home: http://192.168.1.1:3000 (admin/harrywrt)"
+echo " Change default password after first login!"
+echo "---------------------------------------------------------------"
+fi)
 EOF
 
 # ------------------------------------------------------------
@@ -396,7 +401,14 @@ fi
 # ------------------------------------------------------------
 if [[ "${PROFILE}" == "plus" ]]; then
 
-# AdGuardHome pre-configuration (skips setup wizard)
+# Generate bcrypt hash for default password 'harrywrt' at build time
+# GitHub Actions runners have apache2-utils (htpasswd) available
+if command -v htpasswd >/dev/null 2>&1; then
+  AGH_PASS_HASH=$(htpasswd -bnBC 10 "" harrywrt | tr -d ':\n' | sed 's/^://')
+else
+  # Pre-computed bcrypt cost=10 hash for 'harrywrt'
+  AGH_PASS_HASH='$2a$10$YhsNMdveSiGEWBKmSHYFxeAaGQxT0K0iQqhNaOW5KMjkLg9JTL7dC'
+fi
 mkdir -p "${FILES_DIR}/etc/AdGuardHome"
 cat > "${FILES_DIR}/etc/AdGuardHome/AdGuardHome.yaml" <<'EOF'
 http:
@@ -405,7 +417,9 @@ http:
     enabled: false
   address: 0.0.0.0:3000
   session_ttl: 720h
-users: []
+users:
+  - name: admin
+    password: "AGH_PASS_HASH_PLACEHOLDER"
 auth_attempts: 5
 block_auth_min: 15
 http_proxy: ""
@@ -582,6 +596,10 @@ os:
   rlimit_nofile: 0
 schema_version: 34
 EOF
+
+# Inject the bcrypt password hash into the yaml
+sed -i "s|AGH_PASS_HASH_PLACEHOLDER|${AGH_PASS_HASH}|" \
+  "${FILES_DIR}/etc/AdGuardHome/AdGuardHome.yaml"
 
 # dnsmasq handoff: move to port 5353 so AdGuard Home can bind port 53
 cat > "${FILES_DIR}/etc/uci-defaults/60-adguardhome-dns" <<'EOF'
