@@ -123,7 +123,7 @@ Pre-installed dependencies: xray-core, sing-box, geoview, v2ray-geoip, v2ray-geo
 
 | Component | Package(s) | Notes |
 |-----------|-----------|-------|
-| AdGuard Home | adguardhome | DNS on port 53; dnsmasq moved to 5353 automatically |
+| AdGuard Home | adguardhome | DNS on port 53; dnsmasq on port 5353; management UI at port 3000; DoH upstreams via IP (1.1.1.1 / 8.8.8.8); no password by default |
 | WireGuard VPN | kmod-wireguard, wireguard-tools, luci-app-wireguard, qrencode | QR code peer export supported |
 | DDNS | ddns-scripts, luci-app-ddns, ddns-scripts-cloudflare, ddns-scripts-noip | Disabled by default |
 | UPnP / NAT-PMP | miniupnpd-nftables, luci-app-upnp | Disabled by default; enable via LuCI |
@@ -154,6 +154,16 @@ After boot, connect via LAN (DHCP enabled) and open https://192.168.1.1
 Set a password on first login before further configuration.
 
 > Browser SSL warnings are expected (self-signed certificate).
+
+### AdGuard Home (Plus only)
+
+AdGuard Home starts automatically on first boot and is accessible at http://192.168.1.1:3000
+
+No password is set by default — consistent with LuCI behavior. The management UI is also accessible via Services → AdGuard Home in LuCI.
+
+DNS filtering rules (AdGuard DNS filter, AdAway) are pre-loaded but disabled by default. Enable them in the AdGuard Home UI under Filters → DNS blocklists.
+
+> If you change the AdGuard Home port, access it directly via the new port. The LuCI menu entry always points to port 3000.
 
 ---
 
