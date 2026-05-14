@@ -123,7 +123,7 @@ Pre-installed dependencies: xray-core, sing-box, geoview, v2ray-geoip, v2ray-geo
 
 | Component | Package(s) | Notes |
 |-----------|-----------|-------|
-| AdGuard Home | adguardhome | DNS on port 53; dnsmasq on port 5353; management UI at port 3000; DoH upstreams via IP (1.1.1.1 / 8.8.8.8); no password by default |
+| AdGuard Home | adguardhome | DNS on port 53; dnsmasq on port 5353; management UI at port 3000; DoH upstreams via IP (1.1.1.1 / 8.8.8.8); default credentials admin/harrywrt |
 | WireGuard VPN | kmod-wireguard, wireguard-tools, luci-app-wireguard, qrencode | QR code peer export supported |
 | DDNS | ddns-scripts, luci-app-ddns, ddns-scripts-cloudflare, ddns-scripts-noip | Disabled by default |
 | UPnP / NAT-PMP | miniupnpd-nftables, luci-app-upnp | Disabled by default; enable via LuCI |

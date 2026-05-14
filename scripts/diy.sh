@@ -409,8 +409,8 @@ else
   # Pre-computed bcrypt cost=10 hash for 'harrywrt'
   AGH_PASS_HASH='$2a$10$YhsNMdveSiGEWBKmSHYFxeAaGQxT0K0iQqhNaOW5KMjkLg9JTL7dC'
 fi
-mkdir -p "${FILES_DIR}/etc/AdGuardHome"
-cat > "${FILES_DIR}/etc/AdGuardHome/AdGuardHome.yaml" <<'EOF'
+mkdir -p "${FILES_DIR}/etc/adguardhome"
+cat > "${FILES_DIR}/etc/adguardhome/adguardhome.yaml" <<'EOF'
 http:
   pprof:
     port: 6060
@@ -599,36 +599,61 @@ EOF
 
 # Inject the bcrypt password hash into the yaml
 sed -i "s|AGH_PASS_HASH_PLACEHOLDER|${AGH_PASS_HASH}|" \
-  "${FILES_DIR}/etc/AdGuardHome/AdGuardHome.yaml"
+  "${FILES_DIR}/etc/adguardhome/adguardhome.yaml"
 
-# dnsmasq handoff: move to port 5353 so AdGuard Home can bind port 53
+# Set correct permissions on config file
+chmod 600 "${FILES_DIR}/etc/adguardhome/adguardhome.yaml"
+
+# uci-defaults: restore pre-config at first boot
+# The adguardhome package postinst may overwrite the config,
+# so we restore from /rom (the read-only firmware copy) after postinst runs.
 cat > "${FILES_DIR}/etc/uci-defaults/60-adguardhome-dns" <<'EOF'
 #!/bin/sh
 # Move dnsmasq off port 53 so AdGuard Home can bind it.
-# AdGuard Home management UI is accessible at http://192.168.1.1:3000
 uci -q set dhcp.@dnsmasq[0].port=5353
 uci -q commit dhcp
+
+# Restore pre-configured AdGuardHome yaml from /rom in case postinst overwrote it
+if [ -f /rom/etc/adguardhome/adguardhome.yaml ]; then
+  mkdir -p /etc/adguardhome
+  cp -f /rom/etc/adguardhome/adguardhome.yaml /etc/adguardhome/adguardhome.yaml
+  chmod 600 /etc/adguardhome/adguardhome.yaml
+fi
+
 # Enable and start AdGuard Home
 /etc/init.d/adguardhome enable 2>/dev/null || true
-/etc/init.d/adguardhome start 2>/dev/null || true
+/etc/init.d/adguardhome restart 2>/dev/null || true
 exit 0
 EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/60-adguardhome-dns"
 
-# LuCI menu entry for AdGuard Home
-mkdir -p "${FILES_DIR}/usr/share/luci/menu.d"
-cat > "${FILES_DIR}/usr/share/luci/menu.d/luci-app-adguardhome.json" <<'EOF'
-{
-  "admin/services/adguardhome": {
-    "title": "AdGuard Home",
-    "order": 20,
-    "action": {
-      "type": "url",
-      "url": "http://192.168.1.1:3000"
-    }
-  }
-}
+# LuCI controller for AdGuard Home — dynamic redirect (follows LAN IP)
+mkdir -p "${FILES_DIR}/usr/lib/lua/luci/controller"
+cat > "${FILES_DIR}/usr/lib/lua/luci/controller/adguardhome.lua" <<'EOF'
+module("luci.controller.adguardhome", package.seeall)
+
+function index()
+    entry({"admin", "services", "adguardhome"},
+        call("redirect_adg"), _("AdGuard Home"), 60)
+end
+
+function redirect_adg()
+    local http = require "luci.http"
+    local host = http.getenv("HTTP_HOST") or http.getenv("SERVER_NAME") or "192.168.1.1"
+    -- Strip port if present, use only hostname
+    host = host:match("^([^:]+)") or host
+    http.redirect("http://" .. host .. ":3000")
+end
 EOF
+
+# Clear LuCI cache so the new controller is picked up on first boot
+mkdir -p "${FILES_DIR}/etc/uci-defaults"
+cat > "${FILES_DIR}/etc/uci-defaults/61-luci-adguardhome-cache" <<'EOF'
+#!/bin/sh
+rm -rf /tmp/luci-*
+exit 0
+EOF
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/61-luci-adguardhome-cache"
 
 fi
 
