@@ -4,6 +4,8 @@
 # Matrix: OpenWrt 24.10.6 + 25.12.2 × x86_64 + aarch64 × clean + plus
 # =============================================================
 name: Build HarryWrt
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   workflow_dispatch:
