@@ -6,7 +6,7 @@ set -euo pipefail
 #
 # Usage: diy.sh <OWRT_VERSION> <TARGET> [PROFILE]
 #   e.g. diy.sh 24.10.6 x86_64 clean
-#        diy.sh 25.12.2 aarch64 plus
+#        diy.sh 25.12.4 aarch64 plus
 #
 # - Branding (banner / motd / DISTRIB_DESCRIPTION)
 # - Default LuCI theme forced to Bootstrap
@@ -43,6 +43,18 @@ case "${PROFILE}" in
   plus)  EDITION="Plus" ;;
   *)     EDITION="Clean" ;;
 esac
+
+# ------------------------------------------------------------
+# 0a) 25.12+: replace luci-app-opkg with luci-app-package-manager
+#     The config files use luci-app-opkg for compatibility with 24.10.
+#     On 25.12+, opkg is replaced by apk; swap the package in .config.
+# ------------------------------------------------------------
+if [[ "${HARRYWRT_VER}" == 25.* ]]; then
+  if [ -f ".config" ]; then
+    sed -i 's/CONFIG_PACKAGE_luci-app-opkg=y/CONFIG_PACKAGE_luci-app-package-manager=y/' .config
+    echo "[patch] 25.12: luci-app-opkg -> luci-app-package-manager"
+  fi
+fi
 
 # ------------------------------------------------------------
 # 0) Build-time fix: Go toolchain policy for geoview
@@ -135,7 +147,7 @@ EOF
 # 2) SSH login banner
 # ------------------------------------------------------------
 if [[ "${PROFILE}" == "plus" ]]; then
-  AGH_BANNER_LINE=" AdGuard Home: http://192.168.1.1:3000 (admin/harrywrt)"$'\n'" Change default password after first login!"$'\n'"---------------------------------------------------------------"
+  AGH_BANNER_LINE=" AdGuard Home: http://192.168.1.1:3000 (default: admin/harrywrt)"$'\n'" Run: adguard-passwd newpassword  to change credentials!"$'\n'"---------------------------------------------------------------"
 else
   AGH_BANNER_LINE=""
 fi
@@ -654,6 +666,48 @@ exit 0
 EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/60-adguardhome-dns"
 
+# adguard-passwd helper script
+# Usage: adguard-passwd <newpassword> [newusername]
+mkdir -p "${FILES_DIR}/usr/bin"
+cat > "${FILES_DIR}/usr/bin/adguard-passwd" <<'EOF'
+#!/bin/sh
+# adguard-passwd — Change AdGuard Home credentials
+# Usage: adguard-passwd <newpassword> [newusername]
+
+YAML="/etc/adguardhome/adguardhome.yaml"
+NEW_PASS="$1"
+NEW_USER="${2:-}"
+
+if [ -z "$NEW_PASS" ]; then
+    echo "Usage: adguard-passwd <newpassword> [newusername]"
+    echo "Example: adguard-passwd mysecretpassword"
+    echo "         adguard-passwd mysecretpassword myadmin"
+    exit 1
+fi
+
+if [ ! -f "$YAML" ]; then
+    echo "Error: AdGuard Home config not found at $YAML"
+    exit 1
+fi
+
+HASH=$(python3 -c "import bcrypt, sys; print(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt(10)).decode())" "$NEW_PASS" 2>/dev/null)
+
+if [ -z "$HASH" ]; then
+    echo "Error: Failed to generate password hash."
+    exit 1
+fi
+
+sed -i "s|password:.*|password: \"${HASH}\"|" "$YAML"
+
+if [ -n "$NEW_USER" ]; then
+    sed -i "s|name:.*|name: ${NEW_USER}|" "$YAML"
+fi
+
+/etc/init.d/adguardhome restart
+echo "Done. AdGuard Home credentials updated."
+EOF
+chmod 0755 "${FILES_DIR}/usr/bin/adguard-passwd"
+
 # LuCI AdGuard Home entry — modern ucode view (24.10+ compatible)
 # Uses a JS view that redirects to port 3000 using current hostname
 mkdir -p "${FILES_DIR}/usr/share/luci/menu.d"
@@ -692,14 +746,12 @@ return view.extend({
             btn,
             E('hr', {}),
             E('h3', {}, 'Change Username / Password'),
-            E('p', {}, 'AdGuard Home does not support changing credentials via the web UI. Use SSH (htpasswd is pre-installed):'),
+            E('p', {}, 'Use the built-in helper script over SSH:'),
             E('pre', { 'style': 'background:#f4f4f4;padding:0.8em;border-radius:4px;font-size:0.9em;overflow-x:auto;' }, [
-                '# 1. Generate a new bcrypt hash (copy the part after the colon)\n',
-                'htpasswd -bnBC 10 admin newpassword\n\n',
-                '# 2. Edit the config (replace the password hash value)\n',
-                'nano /etc/adguardhome/adguardhome.yaml\n\n',
-                '# 3. Restart AdGuard Home\n',
-                '/etc/init.d/adguardhome restart'
+                '# Change password only\n',
+                'adguard-passwd newpassword\n\n',
+                '# Change both username and password\n',
+                'adguard-passwd newpassword newusername'
             ])
         ]);
     },

@@ -165,7 +165,12 @@ Default credentials:
 - Username: `admin`
 - Password: `harrywrt`
 
-**Change your password after first login** via Settings → General Settings → Account.
+**Change your password after first login** via SSH using the built-in helper:
+```sh
+adguard-passwd newpassword
+# or change both username and password
+adguard-passwd newpassword newusername
+```
 
 In LuCI, go to Services → AdGuard Home to open a page with a direct link to the management UI. Clicking the link opens AdGuard Home in a new tab.
 

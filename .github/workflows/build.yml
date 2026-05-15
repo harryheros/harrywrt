@@ -215,6 +215,15 @@ jobs:
             "CONFIG_PACKAGE_xray-core"
             "CONFIG_PACKAGE_sing-box"
           )
+
+          # Plus-only required packages
+          MUST_Y_PLUS=(
+            "CONFIG_PACKAGE_adguardhome"
+            "CONFIG_PACKAGE_wireguard-tools"
+            "CONFIG_PACKAGE_ddns-scripts"
+            "CONFIG_PACKAGE_python3-bcrypt"
+          )
+
           missing=0
           for k in "${MUST_Y[@]}"; do
             if grep -qE "^${k}=y$" .config; then
@@ -224,6 +233,18 @@ jobs:
               missing=1
             fi
           done
+
+          if [[ "${PROFILE}" == "plus" ]]; then
+            for k in "${MUST_Y_PLUS[@]}"; do
+              if grep -qE "^${k}=y$" .config; then
+                echo "OK: ${k}=y" | tee -a build.log
+              else
+                echo "MISSING (plus): ${k}=y" | tee -a build.log
+                missing=1
+              fi
+            done
+          fi
+
           if [[ "$missing" -ne 0 ]]; then
             echo "ERROR: Required packages missing in .config" | tee -a build.log
             exit 1
