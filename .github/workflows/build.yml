@@ -221,7 +221,6 @@ jobs:
             "CONFIG_PACKAGE_adguardhome"
             "CONFIG_PACKAGE_wireguard-tools"
             "CONFIG_PACKAGE_ddns-scripts"
-            "CONFIG_PACKAGE_python3-bcrypt"
           )
 
           missing=0

@@ -690,20 +690,28 @@ if [ ! -f "$YAML" ]; then
     exit 1
 fi
 
-HASH=$(python3 -c "import bcrypt, sys; print(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt(10)).decode())" "$NEW_PASS" 2>/dev/null)
+HASH=""
+
+# Method 1: use htpasswd if available
+if command -v htpasswd >/dev/null 2>&1; then
+    HASH=$(htpasswd -bnBC 10 admin "${NEW_PASS}" | cut -d: -f2)
+fi
 
 if [ -z "$HASH" ]; then
-    echo "Error: Failed to generate password hash."
+    echo "Error: htpasswd not found. Install it first:"
+    echo "  apk update && apk add apache-utils   (OpenWrt 25.12)"
+    echo "  opkg update && opkg install apache-utils   (OpenWrt 24.10)"
     exit 1
 fi
 
+/etc/init.d/adguardhome stop
 sed -i "s|password:.*|password: \"${HASH}\"|" "$YAML"
 
 if [ -n "$NEW_USER" ]; then
-    sed -i "s|name:.*|name: ${NEW_USER}|" "$YAML"
+    sed -i "s|    name:.*|    name: ${NEW_USER}|" "$YAML"
 fi
 
-/etc/init.d/adguardhome restart
+/etc/init.d/adguardhome start
 echo "Done. AdGuard Home credentials updated."
 EOF
 chmod 0755 "${FILES_DIR}/usr/bin/adguard-passwd"
@@ -746,8 +754,11 @@ return view.extend({
             btn,
             E('hr', {}),
             E('h3', {}, 'Change Username / Password'),
-            E('p', {}, 'Use the built-in helper script over SSH:'),
+            E('p', {}, 'Use the built-in helper script over SSH (requires apache-utils):'),
             E('pre', { 'style': 'background:#f4f4f4;padding:0.8em;border-radius:4px;font-size:0.9em;overflow-x:auto;' }, [
+                '# Install apache-utils if not present (one-time)\n',
+                'apk update && apk add apache-utils       # OpenWrt 25.12\n',
+                'opkg update && opkg install apache-utils # OpenWrt 24.10\n\n',
                 '# Change password only\n',
                 'adguard-passwd newpassword\n\n',
                 '# Change both username and password\n',
