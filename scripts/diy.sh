@@ -689,7 +689,20 @@ return view.extend({
             E('h2', {}, 'AdGuard Home'),
             E('p', {}, 'AdGuard Home runs on port 3000. Click the button below to open it in a new tab.'),
             E('p', {}, [ E('code', {}, url) ]),
-            btn
+            btn,
+            E('hr', {}),
+            E('h3', {}, 'Change Username / Password'),
+            E('p', {}, 'AdGuard Home does not support changing credentials via the web UI. Use SSH:'),
+            E('pre', { 'style': 'background:#f4f4f4;padding:0.8em;border-radius:4px;font-size:0.9em;overflow-x:auto;' }, [
+                '# 1. Generate a new bcrypt hash\n',
+                'htpasswd -bnBC 10 admin newpassword | cut -d: -f2\n\n',
+                '# 2. Stop AdGuard Home\n',
+                '/etc/init.d/adguardhome stop\n\n',
+                '# 3. Edit the config (replace name and/or password hash)\n',
+                'vi /etc/adguardhome/adguardhome.yaml\n\n',
+                '# 4. Restart\n',
+                '/etc/init.d/adguardhome start'
+            ])
         ]);
     },
     handleSaveApply: null,
