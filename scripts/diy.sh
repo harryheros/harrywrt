@@ -690,19 +690,25 @@ if [ ! -f "$YAML" ]; then
     exit 1
 fi
 
-HASH=""
-
-# Method 1: use htpasswd if available
-if command -v htpasswd >/dev/null 2>&1; then
-    HASH=$(htpasswd -bnBC 10 admin "${NEW_PASS}" | cut -d: -f2)
+# Auto-install apache-utils if htpasswd is not available
+if ! command -v htpasswd >/dev/null 2>&1; then
+    echo "htpasswd not found, installing apache-utils..."
+    if command -v apk >/dev/null 2>&1; then
+        apk update && apk add apache-utils
+    elif command -v opkg >/dev/null 2>&1; then
+        opkg update && opkg install apache-utils
+    else
+        echo "Error: Cannot install apache-utils. No package manager found."
+        exit 1
+    fi
 fi
 
-if [ -z "$HASH" ]; then
-    echo "Error: htpasswd not found. Install it first:"
-    echo "  apk update && apk add apache-utils   (OpenWrt 25.12)"
-    echo "  opkg update && opkg install apache-utils   (OpenWrt 24.10)"
+if ! command -v htpasswd >/dev/null 2>&1; then
+    echo "Error: Failed to install apache-utils."
     exit 1
 fi
+
+HASH=$(htpasswd -bnBC 10 admin "${NEW_PASS}" | cut -d: -f2)
 
 /etc/init.d/adguardhome stop
 sed -i "s|password:.*|password: \"${HASH}\"|" "$YAML"
@@ -754,11 +760,8 @@ return view.extend({
             btn,
             E('hr', {}),
             E('h3', {}, 'Change Username / Password'),
-            E('p', {}, 'Use the built-in helper script over SSH (requires apache-utils):'),
+            E('p', {}, 'Use the built-in helper script over SSH (auto-installs dependencies if needed):'),
             E('pre', { 'style': 'background:#f4f4f4;padding:0.8em;border-radius:4px;font-size:0.9em;overflow-x:auto;' }, [
-                '# Install apache-utils if not present (one-time)\n',
-                'apk update && apk add apache-utils       # OpenWrt 25.12\n',
-                'opkg update && opkg install apache-utils # OpenWrt 24.10\n\n',
                 '# Change password only\n',
                 'adguard-passwd newpassword\n\n',
                 '# Change both username and password\n',
