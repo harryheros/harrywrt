@@ -608,7 +608,8 @@ sed -i "s|AGH_PASS_HASH_PLACEHOLDER|${AGH_PASS_HASH}|" \
   "${FILES_DIR}/etc/adguardhome/adguardhome.yaml"
 
 # Set correct permissions on config file
-chmod 600 "${FILES_DIR}/etc/adguardhome/adguardhome.yaml"
+# adguardhome runs as unprivileged user (adguardh) via ujail
+chmod 640 "${FILES_DIR}/etc/adguardhome/adguardhome.yaml"
 
 # uci-defaults: restore pre-config at first boot
 # The adguardhome package postinst may overwrite the config,
@@ -623,11 +624,31 @@ uci -q commit dhcp
 if [ -f /rom/etc/adguardhome/adguardhome.yaml ]; then
   mkdir -p /etc/adguardhome
   cp -f /rom/etc/adguardhome/adguardhome.yaml /etc/adguardhome/adguardhome.yaml
-  chmod 600 /etc/adguardhome/adguardhome.yaml
+  chown root:adguardhome /etc/adguardhome/adguardhome.yaml 2>/dev/null || true
+  chmod 640 /etc/adguardhome/adguardhome.yaml
 fi
 
 # Enable and start AdGuard Home
 /etc/init.d/adguardhome enable 2>/dev/null || true
+
+# Create a boot-time script to pre-create AdGuardHome data files
+# /var/lib is tmpfs and cleared on every boot, so we must recreate on each boot
+cat > /etc/init.d/adguardhome_prestart <<'INITEOF'
+#!/bin/sh /etc/rc.common
+START=18
+STOP=90
+
+start() {
+    mkdir -p /var/lib/adguardhome/data/filters
+    touch /var/lib/adguardhome/data/querylog.json
+    chown -R adguardhome:adguardhome /var/lib/adguardhome 2>/dev/null || true
+    chmod 750 /var/lib/adguardhome
+    chmod 750 /var/lib/adguardhome/data
+}
+INITEOF
+chmod 0755 /etc/init.d/adguardhome_prestart
+/etc/init.d/adguardhome_prestart enable
+
 /etc/init.d/adguardhome restart 2>/dev/null || true
 exit 0
 EOF
