@@ -473,11 +473,11 @@ dns:
   refuse_any: true
   upstream_dns:
     - https://1.1.1.1/dns-query
-    - https://8.8.8.8/dns-query
+    - https://dns.quad9.net/dns-query
   upstream_dns_file: ""
   bootstrap_dns:
     - 1.1.1.1
-    - 8.8.8.8
+    - 9.9.9.9
   fallback_dns: []
   upstream_mode: parallel
   fastest_timeout: 1s
