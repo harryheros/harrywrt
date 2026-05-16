@@ -732,7 +732,7 @@ HASH=$(htpasswd -bnBC 10 admin "${NEW_PASS}" | cut -d: -f2)
 sed -i "s|password:.*|password: \"${HASH}\"|" "$YAML"
 
 if [ -n "$NEW_USER" ]; then
-    sed -i "s|    name:.*|    name: ${NEW_USER}|" "$YAML"
+    sed -i "s|^  - name:.*|  - name: ${NEW_USER}|" "$YAML"
 fi
 
 /etc/init.d/adguardhome start
