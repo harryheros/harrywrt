@@ -208,6 +208,24 @@ EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/50-force-default-theme"
 
 # ------------------------------------------------------------
+# 5b) DHCP and dnsmasq sensible defaults
+#     - DHCP start from .10 (leave .2-.9 for static devices)
+#     - sequential IP assignment (like every commercial router)
+#     - dnsmasq cache 150 -> 1000 for better DNS performance
+# ------------------------------------------------------------
+cat > "${FILES_DIR}/etc/uci-defaults/51-harrywrt-dhcp-defaults" <<'EOF'
+#!/bin/sh
+# DHCP: start from .10, sequential, larger cache
+uci -q set dhcp.lan.start='10'
+uci -q set dhcp.lan.limit='240'
+uci -q set dhcp.lan.sequential_ip='1'
+uci -q set dhcp.@dnsmasq[0].cachesize='1000'
+uci -q commit dhcp
+exit 0
+EOF
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/51-harrywrt-dhcp-defaults"
+
+# ------------------------------------------------------------
 # 6) First boot: musl loader symlink fix (arch-aware)
 # ------------------------------------------------------------
 case "${TARGET}" in
