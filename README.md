@@ -200,6 +200,18 @@ All required dependencies (xray-core, sing-box, geoview, v2ray-geoip, v2ray-geos
 
 > **Important:** On 25.12.4, make sure to download the `.apk` format (not `.ipk`). The `.ipk` format is only compatible with 24.10.x.
 
+### For users in mainland China
+
+If you are unable to access the OpenWrt package repository, switch to a mirror first:
+
+```sh
+# OpenWrt 25.12 (apk)
+sed -i 's_downloads.openwrt.org_mirrors.tuna.tsinghua.edu.cn/openwrt_g' /etc/apk/repositories.d/distfeeds.list
+
+# OpenWrt 24.10 (opkg)
+sed -i 's_downloads.openwrt.org_mirrors.tuna.tsinghua.edu.cn/openwrt_g' /etc/opkg/distfeeds.conf
+```
+
 ---
 
 ## Customization

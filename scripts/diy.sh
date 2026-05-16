@@ -491,7 +491,7 @@ dns:
     - 127.0.0.0/8
     - ::1/128
   cache_enabled: true
-  cache_size: 67108864
+  cache_size: 8388608
   cache_ttl_min: 180
   cache_ttl_max: 1800
   cache_optimistic: true
@@ -536,15 +536,15 @@ tls:
   private_key_path: ""
   strict_sni_check: false
 querylog:
-  dir_path: ""
+  dir_path: /etc/adguardhome/data
   ignored: []
-  interval: 24h
+  interval: 720h
   size_memory: 1000
   enabled: true
   ignored_enabled: false
   file_enabled: true
 statistics:
-  dir_path: ""
+  dir_path: /etc/adguardhome/data
   ignored: []
   interval: 24h
   enabled: true
@@ -657,6 +657,11 @@ if [ -f /rom/etc/adguardhome/adguardhome.yaml ]; then
   chown root:adguardhome /etc/adguardhome/adguardhome.yaml 2>/dev/null || true
   chmod 640 /etc/adguardhome/adguardhome.yaml
 fi
+
+# Create persistent data directory for AdGuard Home
+mkdir -p /etc/adguardhome/data
+chown -R adguardhome:adguardhome /etc/adguardhome/data 2>/dev/null || true
+chmod 750 /etc/adguardhome/data
 
 # Enable and start AdGuard Home
 /etc/init.d/adguardhome enable 2>/dev/null || true
