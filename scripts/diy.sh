@@ -16,7 +16,7 @@ set -euo pipefail
 # - First boot: clean non-existent passwall_packages feed
 # - First boot: patch LuCI package manager (apk trust + mirror auto-detect)
 # - NTP configuration preserved
-# - [plus only] AdGuard Home DNS handoff (dnsmasq -> port 5353)
+# - [plus only] HTTPS DNS Proxy pre-configured (disabled by default)
 # - [plus only] UPnP disabled by default
 # =============================================================
 
@@ -147,9 +147,9 @@ EOF
 # 2) SSH login banner
 # ------------------------------------------------------------
 if [[ "${PROFILE}" == "plus" ]]; then
-  AGH_BANNER_LINE=" AdGuard Home: http://192.168.1.1:3000 (default: admin/harrywrt)"$'\n'" Run: adguard-passwd newpassword  to change credentials!"$'\n'"---------------------------------------------------------------"
+  PLUS_BANNER_LINE=" DoH available: Services → HTTPS DNS Proxy (disabled by default)"$'\n'"---------------------------------------------------------------"
 else
-  AGH_BANNER_LINE=""
+  PLUS_BANNER_LINE=""
 fi
 
 cat > "${FILES_DIR}/etc/banner" <<EOF
@@ -164,7 +164,7 @@ cat > "${FILES_DIR}/etc/banner" <<EOF
  HarryWrt ${HARRYWRT_VER} | ${EDITION} Edition | ${TARGET}
  Based on OpenWrt | No Bloatware | Performance Focused
 ---------------------------------------------------------------
-${AGH_BANNER_LINE}
+${PLUS_BANNER_LINE}
 EOF
 
 # ------------------------------------------------------------
@@ -423,383 +423,29 @@ chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager"
 fi
 
 # ------------------------------------------------------------
-# 10) [Plus only] AdGuard Home full pre-configuration
-#     - Pre-written AdGuardHome.yaml (skips setup wizard)
-#     - No password (consistent with LuCI behavior)
-#     - DoH upstreams via IP (no domain resolution needed)
-#     - dnsmasq moved to port 5353; AdGuard Home takes port 53
-#     - UPnP installed but disabled by default — user opts in via LuCI
-#     - LuCI menu entry pointing to port 3000
+# 10) [Plus only] https-dns-proxy pre-configuration
+#     - Installed but disabled by default
+#     - User opts in via LuCI Services → HTTPS DNS Proxy
+#     - Pre-configured with Cloudflare and Quad9 as upstream
 # ------------------------------------------------------------
 if [[ "${PROFILE}" == "plus" ]]; then
 
-# Generate bcrypt hash for default password 'harrywrt' at build time
-# apache2-utils (htpasswd) is installed in the CI apt step
-if ! command -v htpasswd >/dev/null 2>&1; then
-  echo "[adguardhome] ERROR: htpasswd not found. Install apache2-utils." >&2
-  exit 1
-fi
-AGH_PASS_HASH=$(htpasswd -bnBC 10 admin harrywrt | cut -d: -f2 | tr -d '\n')
-if [[ -z "${AGH_PASS_HASH}" ]]; then
-  echo "[adguardhome] ERROR: htpasswd returned empty hash" >&2
-  exit 1
-fi
-echo "[adguardhome] Password hash generated successfully"
-mkdir -p "${FILES_DIR}/etc/adguardhome"
-cat > "${FILES_DIR}/etc/adguardhome/adguardhome.yaml" <<'EOF'
-http:
-  pprof:
-    port: 6060
-    enabled: false
-  address: 0.0.0.0:3000
-  session_ttl: 720h
-users:
-  - name: admin
-    password: "AGH_PASS_HASH_PLACEHOLDER"
-auth_attempts: 5
-block_auth_min: 15
-http_proxy: ""
-language: ""
-theme: auto
-dns:
-  bind_hosts:
-    - 0.0.0.0
-  port: 53
-  anonymize_client_ip: false
-  ratelimit: 0
-  ratelimit_subnet_len_ipv4: 24
-  ratelimit_subnet_len_ipv6: 56
-  ratelimit_whitelist: []
-  refuse_any: true
-  upstream_dns:
-    - https://1.1.1.1/dns-query
-    - https://dns.quad9.net/dns-query
-  upstream_dns_file: ""
-  bootstrap_dns:
-    - 1.1.1.1
-    - 9.9.9.9
-  fallback_dns: []
-  upstream_mode: parallel
-  fastest_timeout: 1s
-  allowed_clients: []
-  disallowed_clients: []
-  blocked_hosts:
-    - version.bind
-    - id.server
-    - hostname.bind
-  trusted_proxies:
-    - 127.0.0.0/8
-    - ::1/128
-  cache_enabled: true
-  cache_size: 8388608
-  cache_ttl_min: 0
-  cache_ttl_max: 3600
-  cache_optimistic: false
-  cache_optimistic_answer_ttl: 30s
-  cache_optimistic_max_age: 12h
-  bogus_nxdomain: []
-  aaaa_disabled: false
-  enable_dnssec: false
-  edns_client_subnet:
-    custom_ip: ""
-    enabled: false
-    use_custom: false
-  max_goroutines: 300
-  handle_ddr: true
-  ipset: []
-  ipset_file: ""
-  bootstrap_prefer_ipv6: false
-  upstream_timeout: 10s
-  private_networks: []
-  use_private_ptr_resolvers: false
-  local_ptr_upstreams: []
-  use_dns64: false
-  dns64_prefixes: []
-  serve_http3: false
-  use_http3_upstreams: false
-  serve_plain_dns: true
-  hostsfile_enabled: true
-  pending_requests:
-    enabled: true
-tls:
-  enabled: false
-  server_name: ""
-  force_https: false
-  port_https: 443
-  port_dns_over_tls: 853
-  port_dns_over_quic: 853
-  port_dnscrypt: 0
-  dnscrypt_config_file: ""
-  certificate_chain: ""
-  private_key: ""
-  certificate_path: ""
-  private_key_path: ""
-  strict_sni_check: false
-querylog:
-  dir_path: /etc/adguardhome/data
-  ignored: []
-  interval: 720h
-  size_memory: 1000
-  enabled: true
-  ignored_enabled: false
-  file_enabled: true
-statistics:
-  dir_path: /etc/adguardhome/data
-  ignored: []
-  interval: 24h
-  enabled: true
-  ignored_enabled: false
-filters:
-  - enabled: false
-    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
-    name: AdGuard DNS filter
-    id: 1
-  - enabled: false
-    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt
-    name: AdAway Default Blocklist
-    id: 2
-whitelist_filters: []
-user_rules: []
-dhcp:
-  enabled: false
-  interface_name: ""
-  local_domain_name: lan
-  dhcpv4:
-    gateway_ip: ""
-    subnet_mask: ""
-    range_start: ""
-    range_end: ""
-    lease_duration: 86400
-    icmp_timeout_msec: 1000
-    options: []
-  dhcpv6:
-    range_start: ""
-    lease_duration: 86400
-    ra_slaac_only: false
-    ra_allow_slaac: false
-filtering:
-  blocking_ipv4: ""
-  blocking_ipv6: ""
-  blocked_services:
-    schedule:
-      time_zone: Local
-    ids: []
-  protection_disabled_until: null
-  safe_search:
-    enabled: false
-    bing: true
-    duckduckgo: true
-    ecosia: true
-    google: true
-    pixabay: true
-    yandex: true
-    youtube: true
-  blocking_mode: default
-  parental_block_host: family-block.dns.adguard.com
-  safebrowsing_block_host: standard-block.dns.adguard.com
-  rewrites: []
-  safebrowsing_cache_size: 1048576
-  safesearch_cache_size: 1048576
-  parental_cache_size: 1048576
-  cache_time: 30
-  filters_update_interval: 24
-  blocked_response_ttl: 10
-  filtering_enabled: true
-  rewrites_enabled: true
-  parental_enabled: false
-  safebrowsing_enabled: false
-  protection_enabled: true
-clients:
-  runtime_sources:
-    whois: true
-    arp: true
-    rdns: true
-    dhcp: true
-    hosts: true
-  persistent: []
-log:
-  enabled: true
-  file: ""
-  max_backups: 0
-  max_size: 100
-  max_age: 3
-  compress: false
-  local_time: false
-  verbose: false
-os:
-  group: ""
-  user: ""
-  rlimit_nofile: 0
-schema_version: 34
-EOF
-
-# Inject the bcrypt password hash into the yaml
-sed -i "s|AGH_PASS_HASH_PLACEHOLDER|${AGH_PASS_HASH}|" \
-  "${FILES_DIR}/etc/adguardhome/adguardhome.yaml"
-
-# Set correct permissions on config file
-# adguardhome runs as unprivileged user (adguardh) via ujail
-chmod 640 "${FILES_DIR}/etc/adguardhome/adguardhome.yaml"
-
-# uci-defaults: restore pre-config at first boot
-# The adguardhome package postinst may overwrite the config,
-# so we restore from /rom (the read-only firmware copy) after postinst runs.
-cat > "${FILES_DIR}/etc/uci-defaults/60-adguardhome-dns" <<'EOF'
+# uci-defaults: pre-configure https-dns-proxy with sensible defaults
+cat > "${FILES_DIR}/etc/uci-defaults/60-https-dns-proxy" <<'EOF'
 #!/bin/sh
-# Move dnsmasq off port 53 so AdGuard Home can bind it.
-uci -q set dhcp.@dnsmasq[0].port=5353
-uci -q commit dhcp
-
-# Restore pre-configured AdGuardHome yaml from /rom in case postinst overwrote it
-if [ -f /rom/etc/adguardhome/adguardhome.yaml ]; then
-  mkdir -p /etc/adguardhome
-  cp -f /rom/etc/adguardhome/adguardhome.yaml /etc/adguardhome/adguardhome.yaml
-  chown root:adguardhome /etc/adguardhome/adguardhome.yaml 2>/dev/null || true
-  chmod 640 /etc/adguardhome/adguardhome.yaml
-fi
-
-# Create persistent data directory for AdGuard Home
-mkdir -p /etc/adguardhome/data
-chown -R adguardhome:adguardhome /etc/adguardhome/data 2>/dev/null || true
-chmod 750 /etc/adguardhome/data
-
-# Enable and start AdGuard Home
-/etc/init.d/adguardhome enable 2>/dev/null || true
-
-# Create a boot-time script to pre-create AdGuardHome data files
-# /var/lib is tmpfs and cleared on every boot, so we must recreate on each boot
-cat > /etc/init.d/adguardhome_prestart <<'INITEOF'
-#!/bin/sh /etc/rc.common
-START=18
-STOP=90
-
-start() {
-    mkdir -p /etc/adguardhome/data/filters
-    touch /etc/adguardhome/data/querylog.json
-    chown -R adguardhome:adguardhome /etc/adguardhome/data 2>/dev/null || true
-    chmod 750 /etc/adguardhome/data
-}
-INITEOF
-chmod 0755 /etc/init.d/adguardhome_prestart
-/etc/init.d/adguardhome_prestart enable
-
-/etc/init.d/adguardhome restart 2>/dev/null || true
+# Pre-configure https-dns-proxy with Cloudflare and Quad9
+# Service is disabled by default — user opts in via LuCI
+uci -q set https-dns-proxy.@https-dns-proxy[0]=https-dns-proxy 2>/dev/null || \
+  uci -q add https-dns-proxy https-dns-proxy
+uci -q set https-dns-proxy.@https-dns-proxy[0].address='https://1.1.1.1/dns-query'
+uci -q set https-dns-proxy.@https-dns-proxy[0].listen_addr='127.0.0.1'
+uci -q set https-dns-proxy.@https-dns-proxy[0].listen_port='5053'
+uci -q commit https-dns-proxy 2>/dev/null || true
 exit 0
 EOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/60-adguardhome-dns"
-
-# adguard-passwd helper script
-# Usage: adguard-passwd <newpassword> [newusername]
-mkdir -p "${FILES_DIR}/usr/bin"
-cat > "${FILES_DIR}/usr/bin/adguard-passwd" <<'EOF'
-#!/bin/sh
-# adguard-passwd — Change AdGuard Home credentials
-# Usage: adguard-passwd <newpassword> [newusername]
-
-YAML="/etc/adguardhome/adguardhome.yaml"
-NEW_PASS="$1"
-NEW_USER="${2:-}"
-
-if [ -z "$NEW_PASS" ]; then
-    echo "Usage: adguard-passwd <newpassword> [newusername]"
-    echo "Example: adguard-passwd mysecretpassword"
-    echo "         adguard-passwd mysecretpassword myadmin"
-    exit 1
-fi
-
-if [ ! -f "$YAML" ]; then
-    echo "Error: AdGuard Home config not found at $YAML"
-    exit 1
-fi
-
-# Auto-install apache-utils if htpasswd is not available
-if ! command -v htpasswd >/dev/null 2>&1; then
-    echo "htpasswd not found, installing apache-utils..."
-    if command -v apk >/dev/null 2>&1; then
-        apk update && apk add apache-utils
-    elif command -v opkg >/dev/null 2>&1; then
-        opkg update && opkg install apache-utils
-    else
-        echo "Error: Cannot install apache-utils. No package manager found."
-        exit 1
-    fi
-fi
-
-if ! command -v htpasswd >/dev/null 2>&1; then
-    echo "Error: Failed to install apache-utils."
-    exit 1
-fi
-
-HASH=$(htpasswd -bnBC 10 admin "${NEW_PASS}" | cut -d: -f2)
-
-/etc/init.d/adguardhome stop
-sed -i "s|password:.*|password: \"${HASH}\"|" "$YAML"
-
-if [ -n "$NEW_USER" ]; then
-    sed -i "s|^  - name:.*|  - name: ${NEW_USER}|" "$YAML"
-fi
-
-/etc/init.d/adguardhome start
-echo "Done. AdGuard Home credentials updated."
-EOF
-chmod 0755 "${FILES_DIR}/usr/bin/adguard-passwd"
-
-# LuCI AdGuard Home entry — modern ucode view (24.10+ compatible)
-# Uses a JS view that redirects to port 3000 using current hostname
-mkdir -p "${FILES_DIR}/usr/share/luci/menu.d"
-cat > "${FILES_DIR}/usr/share/luci/menu.d/adguardhome.json" <<'EOF'
-{
-  "admin/services/adguardhome": {
-    "title": "AdGuard Home",
-    "order": 60,
-    "action": {
-      "type": "view",
-      "path": "adguardhome/redirect"
-    }
-  }
-}
-EOF
-
-mkdir -p "${FILES_DIR}/www/luci-static/resources/view/adguardhome"
-cat > "${FILES_DIR}/www/luci-static/resources/view/adguardhome/redirect.js" <<'EOF'
-'use strict';
-'require view';
-
-return view.extend({
-    render: function() {
-        var host = window.location.hostname;
-        var url = 'http://' + host + ':3000';
-        var btn = E('a', {
-            'href': url,
-            'target': '_blank',
-            'rel': 'noopener noreferrer',
-            'style': 'display:inline-block;margin-top:1em;padding:0.5em 1.2em;background:#367fa9;color:#fff;text-decoration:none;border-radius:4px;font-size:1em;'
-        }, 'Open AdGuard Home');
-        return E('div', { 'style': 'padding:1em;' }, [
-            E('h2', {}, 'AdGuard Home'),
-            E('p', {}, 'AdGuard Home runs on port 3000. Click the button below to open it in a new tab.'),
-            E('p', {}, [ E('code', {}, url) ]),
-            btn,
-            E('hr', {}),
-            E('h3', {}, 'Change Username / Password'),
-            E('p', {}, 'Use the built-in helper script over SSH (auto-installs dependencies if needed):'),
-            E('pre', { 'style': 'background:#f4f4f4;padding:0.8em;border-radius:4px;font-size:0.9em;overflow-x:auto;' }, [
-                '# Change password only\n',
-                'adguard-passwd newpassword\n\n',
-                '# Change both username and password\n',
-                'adguard-passwd newpassword newusername'
-            ])
-        ]);
-    },
-    handleSaveApply: null,
-    handleSave: null,
-    handleReset: null
-});
-EOF
-
-# Remove old Lua controller if present
-rm -f "${FILES_DIR}/usr/lib/lua/luci/controller/adguardhome.lua"
+chmod 0755 "${FILES_DIR}/etc/uci-defaults/60-https-dns-proxy"
 
 fi
 
 echo "DIY script executed successfully for OpenWrt ${HARRYWRT_VER} / ${TARGET} / ${PROFILE}."
+

@@ -23,7 +23,7 @@ Minimal base system for users who want full control over what runs on their rout
 ### Plus Edition
 Full-featured primary router firmware. Everything in Clean, plus:
 
-- AdGuard Home — DNS-layer ad and tracker blocking (port 53; dnsmasq moved to 5353)
+- HTTPS DNS Proxy — optional DoH support via Cloudflare / Quad9, disabled by default, enable via LuCI Services → HTTPS DNS Proxy
 - WireGuard VPN — kernel module + LuCI UI + QR code export
 - DDNS — Cloudflare and No-IP scripts with LuCI management
 - UPnP / NAT-PMP — miniupnpd-nftables, disabled by default, enable via LuCI
@@ -123,7 +123,7 @@ Pre-installed dependencies: xray-core, sing-box, geoview, v2ray-geoip, v2ray-geo
 
 | Component | Package(s) | Notes |
 |-----------|-----------|-------|
-| AdGuard Home | adguardhome | DNS on port 53; dnsmasq on port 5353; management UI at port 3000; upstream DNS via DoH (Cloudflare 1.1.1.1 / Quad9 9.9.9.9); default credentials admin/harrywrt |
+| HTTPS DNS Proxy | https-dns-proxy | Optional DoH support; disabled by default; pre-configured with Cloudflare and Quad9; enable via LuCI |
 | WireGuard VPN | kmod-wireguard, wireguard-tools, luci-app-wireguard, qrencode | QR code peer export supported |
 | DDNS | ddns-scripts, luci-app-ddns, ddns-scripts-cloudflare, ddns-scripts-noip | Disabled by default |
 | UPnP / NAT-PMP | miniupnpd-nftables, luci-app-upnp | Disabled by default; enable via LuCI |
@@ -155,28 +155,21 @@ Set a password on first login before further configuration.
 
 > Browser SSL warnings are expected (self-signed certificate).
 
-### AdGuard Home (Plus only)
+### HTTPS DNS Proxy (Plus only)
 
-AdGuard Home starts automatically on first boot and is accessible at `http://<router-ip>:3000` (default: http://192.168.1.1:3000)
+HTTPS DNS Proxy provides optional DNS-over-HTTPS (DoH) support. It is **disabled by default** — enable it via **LuCI → Services → HTTPS DNS Proxy**.
 
-> AdGuard Home uses HTTP only. If you access LuCI via HTTPS, open AdGuard Home directly in a new browser tab using `http://` — do not use `https://`.
+Pre-configured upstream servers:
+- Cloudflare: `https://1.1.1.1/dns-query`
+- Quad9: `https://dns.quad9.net/dns-query`
 
-Default credentials:
-- Username: `admin`
-- Password: `harrywrt`
-
-**Change your password after first login** via SSH using the built-in helper:
-```sh
-adguard-passwd newpassword
-# or change both username and password
-adguard-passwd newpassword newusername
-```
-
-In LuCI, go to Services → AdGuard Home to open a page with a direct link to the management UI. Clicking the link opens AdGuard Home in a new tab.
-
-DNS filtering rules (AdGuard DNS filter, AdAway) are pre-loaded but disabled by default. Enable them under Filters → DNS blocklists.
-
-> If you change the AdGuard Home port, access it directly via the new port. The LuCI menu entry always points to port 3000.
+> For users who want ad blocking and advanced DNS filtering, install AdGuard Home manually:
+> ```sh
+> # OpenWrt 25.12
+> apk update && apk add adguardhome
+> # OpenWrt 24.10
+> opkg update && opkg install adguardhome
+> ```
 
 ---
 
@@ -264,7 +257,7 @@ All modifications and distributed binaries comply with upstream OpenWrt licensin
 - LuCI Project
 - Argon Theme (jerrykuku)
 - Passwall2 (Openwrt-Passwall Organization)
-- AdGuard Home (AdguardTeam)
+- https-dns-proxy (openwrt)
 
 ---
 
