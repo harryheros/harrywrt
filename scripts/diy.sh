@@ -466,7 +466,7 @@ dns:
     - 0.0.0.0
   port: 53
   anonymize_client_ip: false
-  ratelimit: 20
+  ratelimit: 0
   ratelimit_subnet_len_ipv4: 24
   ratelimit_subnet_len_ipv6: 56
   ratelimit_whitelist: []
@@ -492,14 +492,14 @@ dns:
     - ::1/128
   cache_enabled: true
   cache_size: 8388608
-  cache_ttl_min: 180
-  cache_ttl_max: 1800
-  cache_optimistic: true
+  cache_ttl_min: 0
+  cache_ttl_max: 3600
+  cache_optimistic: false
   cache_optimistic_answer_ttl: 30s
   cache_optimistic_max_age: 12h
   bogus_nxdomain: []
   aaaa_disabled: false
-  enable_dnssec: true
+  enable_dnssec: false
   edns_client_subnet:
     custom_ip: ""
     enabled: false
@@ -674,11 +674,10 @@ START=18
 STOP=90
 
 start() {
-    mkdir -p /var/lib/adguardhome/data/filters
-    touch /var/lib/adguardhome/data/querylog.json
-    chown -R adguardhome:adguardhome /var/lib/adguardhome 2>/dev/null || true
-    chmod 750 /var/lib/adguardhome
-    chmod 750 /var/lib/adguardhome/data
+    mkdir -p /etc/adguardhome/data/filters
+    touch /etc/adguardhome/data/querylog.json
+    chown -R adguardhome:adguardhome /etc/adguardhome/data 2>/dev/null || true
+    chmod 750 /etc/adguardhome/data
 }
 INITEOF
 chmod 0755 /etc/init.d/adguardhome_prestart
