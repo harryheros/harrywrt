@@ -1,26 +1,35 @@
 # =============================================================
 # HarryWrt — Multi-version, Multi-platform, Multi-profile Build (matrix)
 #
-# Matrix: OpenWrt 24.10.7 + 25.12.4 × x86_64 + aarch64 × clean + plus
+# Matrix: OpenWrt 24.10 + 25.12 × x86_64 + aarch64 × clean + plus
+#
+# OpenWrt versions are defined ONCE here (OWRT_24 / OWRT_25) and used by
+# the matrix and the release notes. Bump them for every service release —
+# they carry security fixes (e.g. 24.10.8 / 25.12.5 fix CVE-2026-53921, an
+# unauthenticated root RCE in odhcpd's DHCPv6 server).
 # =============================================================
 name: Build HarryWrt
 
 env:
+  OWRT_24: "24.10.8"
+  OWRT_25: "25.12.5"
+  # Only needed for the optional tmate SSH-debug action; all other actions
+  # below are Node 24 majors.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "Release version (e.g. v3.1)"
+        description: "Release version (e.g. v3.2)"
         required: true
-        default: "v3.1"
+        default: "v3.2"
       ssh_debug:
         description: "Enable SSH debug session (tmate)"
         required: false
         default: "false"
       build_filter:
-        description: "Build filter (all / 24.10 / 25.12 / x86_64 / aarch64 / clean / plus)"
+        description: "Build filter (all / 24.10 / 25.12 / clean / plus / boards / x86_64 / aarch64 / rockchip / rpi4 / rpi5)"
         required: false
         default: "all"
   push:
@@ -39,32 +48,50 @@ jobs:
     steps:
       - id: set
         shell: bash
+        env:
+          FILTER: ${{ github.event.inputs.build_filter || 'all' }}
         run: |
-          filter="${{ github.event.inputs.build_filter || 'all' }}"
+          python3 - <<'PY'
+          import json, os
 
-          all='[
-            {"owrt_tag":"v24.10.7","owrt_base":"24.10.7","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"clean","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v24.10.7","owrt_base":"24.10.7","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"clean","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.4","owrt_base":"25.12.4","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"clean","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.4","owrt_base":"25.12.4","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"clean","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v24.10.7","owrt_base":"24.10.7","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"plus","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v24.10.7","owrt_base":"24.10.7","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"plus","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.4","owrt_base":"25.12.4","target":"x86_64","arch":"x86/64","config":"x86_64","profile":"plus","runner":"ubuntu-24.04"},
-            {"owrt_tag":"v25.12.4","owrt_base":"25.12.4","target":"aarch64","arch":"armsr/armv8","config":"aarch64","profile":"plus","runner":"ubuntu-24.04"}
-          ]'
+          versions = [os.environ["OWRT_24"], os.environ["OWRT_25"]]
+          # target  = name used in file names and build_filter
+          # arch    = OpenWrt target/subtarget (bin/targets/<arch>)
+          # config  = configs/targets/<config>.config
+          targets = [
+              {"target": "x86_64",   "arch": "x86/64",         "config": "x86_64"},
+              {"target": "aarch64",  "arch": "armsr/armv8",    "config": "aarch64"},
+              {"target": "rockchip", "arch": "rockchip/armv8", "config": "rockchip"},
+              {"target": "rpi4",     "arch": "bcm27xx/bcm2711", "config": "rpi4"},
+              {"target": "rpi5",     "arch": "bcm27xx/bcm2712", "config": "rpi5"},
+          ]
+          target_names = [t["target"] for t in targets]
+          jobs = [
+              dict(t, owrt_tag="v" + v, owrt_base=v, profile=p, runner="ubuntu-24.04")
+              for p in ("clean", "plus") for v in versions for t in targets
+          ]
 
-          case "$filter" in
-            24.10)    matrix=$(echo "$all" | jq -c '[.[] | select(.owrt_base | startswith("24."))]') ;;
-            25.12)    matrix=$(echo "$all" | jq -c '[.[] | select(.owrt_base | startswith("25."))]') ;;
-            x86_64)   matrix=$(echo "$all" | jq -c '[.[] | select(.target == "x86_64")]') ;;
-            aarch64)  matrix=$(echo "$all" | jq -c '[.[] | select(.target == "aarch64")]') ;;
-            clean)    matrix=$(echo "$all" | jq -c '[.[] | select(.profile == "clean")]') ;;
-            plus)     matrix=$(echo "$all" | jq -c '[.[] | select(.profile == "plus")]') ;;
-            *)        matrix=$(echo "$all" | jq -c '.') ;;
-          esac
+          f = os.environ.get("FILTER", "all").strip()
+          if f == "24.10":
+              jobs = [j for j in jobs if j["owrt_base"].startswith("24.")]
+          elif f == "25.12":
+              jobs = [j for j in jobs if j["owrt_base"].startswith("25.")]
+          elif f in target_names:
+              jobs = [j for j in jobs if j["target"] == f]
+          elif f == "boards":
+              jobs = [j for j in jobs if j["target"] in ("rockchip", "rpi4", "rpi5")]
+          elif f in ("clean", "plus"):
+              jobs = [j for j in jobs if j["profile"] == f]
+          elif f != "all":
+              raise SystemExit(f"Unknown build_filter '{f}' (use all / 24.10 / 25.12 / "
+                               "clean / plus / boards / " + " / ".join(target_names) + ")")
 
-          echo "matrix={\"include\":${matrix}}" >> "$GITHUB_OUTPUT"
-          echo "Building: $matrix"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write("matrix=" + json.dumps({"include": jobs}, separators=(",", ":")) + "\n")
+          print(f"Building {len(jobs)} job(s):")
+          for j in jobs:
+              print(f"  {j['owrt_base']} {j['profile']} {j['target']}")
+          PY
 
   # ── Build each combination ─────────────────────────────────
   build:
@@ -85,7 +112,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Determine release version
         id: meta
@@ -147,7 +174,7 @@ jobs:
             ccache jq
 
       - name: Setup ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.ccache
           key: ccache-${{ env.OWRT_TAG }}-${{ env.TARGET }}-${{ github.run_id }}
@@ -169,17 +196,6 @@ jobs:
           cd openwrt
           echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
 
-      - name: Add extra packages (Argon theme)
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd openwrt
-          mkdir -p package/extra
-          rm -rf package/extra/luci-theme-argon || true
-          git clone --depth=1 --branch master \
-            https://github.com/jerrykuku/luci-theme-argon.git \
-            package/extra/luci-theme-argon 2>&1 | tee -a build.log
-
       - name: Update and install feeds
         shell: bash
         run: |
@@ -194,8 +210,9 @@ jobs:
           set -euo pipefail
           cd openwrt
 
-          # Select config by target and profile
-          cp "${GITHUB_WORKSPACE}/configs/${CONFIG}-${PROFILE}.config" .config
+          # Platform (target + hardware) + edition (packages)
+          cat "${GITHUB_WORKSPACE}/configs/targets/${CONFIG}.config" \
+              "${GITHUB_WORKSPACE}/configs/profiles/${PROFILE}.config" > .config
           echo "CONFIG_CCACHE=y" >> .config
 
           # Run DIY script
@@ -214,10 +231,12 @@ jobs:
             "CONFIG_PACKAGE_coreutils"
             "CONFIG_PACKAGE_coreutils-base64"
             "CONFIG_PACKAGE_coreutils-nohup"
+            "CONFIG_PACKAGE_coreutils-timeout"
             "CONFIG_PACKAGE_libuci-lua"
             "CONFIG_PACKAGE_lua"
             "CONFIG_PACKAGE_luci-lib-jsonc"
             "CONFIG_PACKAGE_resolveip"
+            "CONFIG_PACKAGE_irqbalance"
           )
 
           # Plus-only required packages
@@ -232,6 +251,8 @@ jobs:
             "CONFIG_PACKAGE_xray-core"
             "CONFIG_PACKAGE_sing-box"
             "CONFIG_PACKAGE_lyaml"
+            "CONFIG_PACKAGE_chinadns-ng"
+            "CONFIG_PACKAGE_kmod-tcp-bbr"
           )
 
           missing=0
@@ -255,10 +276,58 @@ jobs:
             done
           fi
 
+          # Plus promises an offline-ready Passwall2 install. Passwall2 keeps
+          # adding runtime dependencies (26.x added coreutils-timeout), and a
+          # single missing one makes the offline install fail. Check the
+          # CURRENT upstream LUCI_DEPENDS instead of a list frozen in this file.
+          if [[ "${PROFILE}" == "plus" ]]; then
+            PW2_MK_URL="https://raw.githubusercontent.com/Openwrt-Passwall/openwrt-passwall2/main/luci-app-passwall2/Makefile"
+            if curl -fsSL --retry 3 --max-time 30 "$PW2_MK_URL" -o /tmp/pw2.mk; then
+              pw2_deps=$(awk '/^LUCI_DEPENDS:=/{f=1} f{print; if ($0 !~ /\\$/) exit}' /tmp/pw2.mk \
+                         | grep -o '+[A-Za-z0-9._-]*' | tr -d '+' | sort -u)
+              if [[ -z "$pw2_deps" ]]; then
+                echo "::warning::Could not parse Passwall2 LUCI_DEPENDS; skipping upstream dependency check"
+              fi
+              for dep in $pw2_deps; do
+                if grep -qE "^CONFIG_PACKAGE_${dep}=y$" .config; then
+                  echo "OK (passwall2 dep): ${dep}" | tee -a build.log
+                else
+                  echo "MISSING (passwall2 dep): ${dep} — add CONFIG_PACKAGE_${dep}=y to the plus configs" | tee -a build.log
+                  missing=1
+                fi
+              done
+            else
+              echo "::warning::Could not download Passwall2 Makefile; skipping upstream dependency check"
+            fi
+          fi
+
           if [[ "$missing" -ne 0 ]]; then
             echo "ERROR: Required packages missing in .config" | tee -a build.log
             exit 1
           fi
+
+          # Board platforms list several devices. `make defconfig` silently
+          # drops device profiles this OpenWrt release doesn't know, so check
+          # which requested boards survived. Unknown boards are skipped with
+          # a warning (support differs between releases); every accepted
+          # board is verified to have produced an image after the build.
+          requested=$(sed -n 's/^CONFIG_TARGET_DEVICE_[A-Za-z0-9]*_[A-Za-z0-9]*_DEVICE_\(.*\)=y$/\1/p' \
+                      "${GITHUB_WORKSPACE}/configs/targets/${CONFIG}.config")
+          accepted=""
+          for dev in $requested; do
+            if grep -qE "^CONFIG_TARGET_DEVICE_[A-Za-z0-9]+_[A-Za-z0-9]+_DEVICE_${dev}=y$" .config; then
+              accepted="${accepted:+$accepted }${dev}"
+              echo "OK (board): ${dev}" | tee -a build.log
+            else
+              echo "::warning::Board '${dev}' is not available in OpenWrt ${OWRT_BASE}; skipping it"
+              echo "SKIPPED (board not in ${OWRT_BASE}): ${dev}" | tee -a build.log
+            fi
+          done
+          if [[ -n "$requested" && -z "$accepted" ]]; then
+            echo "ERROR: none of the requested boards exist in OpenWrt ${OWRT_BASE}" | tee -a build.log
+            exit 1
+          fi
+          echo "HW_DEVICES=${accepted}" >> "$GITHUB_ENV"
 
       - name: Download sources
         shell: bash
@@ -302,62 +371,105 @@ jobs:
           REL="${{ steps.meta.outputs.release }}"
           PREFIX="HarryWrt-${OWRT_BASE}-${PROFILE}-${REL}-${TARGET}"
 
-          # x86_64 has BIOS+UEFI; aarch64 has only EFI
+          shopt -s nullglob
+          # OpenWrt names images openwrt-<ver>-<target>-<subtarget>-<rest>.
+          # Everything up to and including "<target>-<subtarget>-" is
+          # replaced by the HarryWrt prefix.
+          SRC_TAG="${ARCH_PATH//\//-}-"
+
           if [[ "${TARGET}" == "x86_64" ]]; then
+            # x86: keep the established BIOS/UEFI names
             for pattern in \
               "*squashfs-combined.img.gz" \
               "*squashfs-combined-efi.img.gz" \
               "*ext4-combined.img.gz" \
               "*ext4-combined-efi.img.gz"
             do
-              count=$(ls -1 $pattern 2>/dev/null | wc -l)
-              if [[ "$count" -eq 0 ]]; then
+              files=( $pattern )
+              if [[ ${#files[@]} -eq 0 ]]; then
                 echo "ERROR: No file matching '${pattern}'" >&2
                 ls -lah . >&2
                 exit 1
               fi
             done
-
-            cp -f "$(ls -1 *squashfs-combined.img.gz    | head -n1)" "${PREFIX}-squashfs-bios.img.gz"
-            cp -f "$(ls -1 *squashfs-combined-efi.img.gz| head -n1)" "${PREFIX}-squashfs-uefi.img.gz"
-            cp -f "$(ls -1 *ext4-combined.img.gz        | head -n1)" "${PREFIX}-ext4-bios.img.gz"
-            cp -f "$(ls -1 *ext4-combined-efi.img.gz    | head -n1)" "${PREFIX}-ext4-uefi.img.gz"
-
-          elif [[ "${TARGET}" == "aarch64" ]]; then
-            # armsr/armv8 produces rootfs + kernel images
-            for f in *squashfs*.img.gz *ext4*.img.gz; do
-              [ -f "$f" ] || continue
-              newname="${PREFIX}-$(echo "$f" | sed 's/.*-//')"
-              cp -f "$f" "$newname"
-            done
-            # Also grab the combined images if they exist
-            for f in *combined*.img.gz; do
-              [ -f "$f" ] || continue
-              newname="${PREFIX}-$(echo "$f" | sed 's/.*generic-//')"
-              cp -f "$f" "$newname"
+            cp -f "$(ls -1 *squashfs-combined.img.gz     | head -n1)" "${PREFIX}-squashfs-bios.img.gz"
+            cp -f "$(ls -1 *squashfs-combined-efi.img.gz | head -n1)" "${PREFIX}-squashfs-uefi.img.gz"
+            cp -f "$(ls -1 *ext4-combined.img.gz         | head -n1)" "${PREFIX}-ext4-bios.img.gz"
+            cp -f "$(ls -1 *ext4-combined-efi.img.gz     | head -n1)" "${PREFIX}-ext4-uefi.img.gz"
+          else
+            # aarch64 VM:  <...>-generic-{squashfs,ext4}-combined-efi.img.gz
+            # boards:      <...>-<board>-{squashfs,ext4}-{sysupgrade,factory}.img.gz
+            # Partition-only pieces (*-rootfs.img.gz, kernels) are not
+            # installable on their own and are skipped.
+            for f in openwrt-*"${SRC_TAG}"*.img.gz; do
+              rest="${f#*"${SRC_TAG}"}"
+              case "$rest" in
+                *-rootfs.img.gz|*kernel*|*initramfs*) continue ;;
+              esac
+              rest="${rest#generic-}"
+              cp -f "$f" "${PREFIX}-${rest}"
             done
           fi
 
-          sha256sum ${PREFIX}-*.img.gz > SHA256SUMS 2>/dev/null || true
+          # Every board accepted at configure time must have an image.
+          for dev in ${HW_DEVICES:-}; do
+            imgs=( "${PREFIX}-${dev}-squashfs-"*.img.gz "${PREFIX}-${dev}-ext4-"*.img.gz )
+            if [[ ${#imgs[@]} -eq 0 ]]; then
+              echo "ERROR: no image produced for board '${dev}'" >&2
+              ls -lah . >&2
+              exit 1
+            fi
+            echo "Board ${dev}: ${#imgs[@]} image(s)"
+          done
+
+          imgs=( "${PREFIX}-"*.img.gz )
+          if [[ ${#imgs[@]} -eq 0 ]]; then
+            echo "ERROR: no firmware images found" >&2
+            ls -lah . >&2
+            exit 1
+          fi
+
+          # Build transparency: exact package versions (manifest) and the
+          # exact feed commits / config used (buildinfo).
+          for f in openwrt-*"${SRC_TAG}"*.manifest; do
+            rest="${f#*"${SRC_TAG}"}"
+            if [[ "$rest" == "generic.manifest" ]]; then
+              cp -f "$f" "${PREFIX}.manifest"
+            else
+              cp -f "$f" "${PREFIX}-${rest}"
+            fi
+          done
+          for f in feeds.buildinfo version.buildinfo config.buildinfo; do
+            [ -f "$f" ] && cp -f "$f" "${PREFIX}-${f}"
+          done
+
+          sha256sum "${PREFIX}"-* > "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}"
           echo "Output files:"
-          ls -lah ${PREFIX}-*.img.gz SHA256SUMS 2>/dev/null || echo "WARNING: No output files found"
+          ls -lah "${PREFIX}"-* "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}"
+          {
+            echo "### ${OWRT_BASE} ${PROFILE} ${TARGET}"
+            [ -n "${HW_DEVICES:-}" ] && echo "Boards: ${HW_DEVICES}"
+            echo '```'
+            ls -1 "${PREFIX}"-*.img.gz
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           echo "output_dir=openwrt/bin/targets/${ARCH_PATH}" >> "$GITHUB_OUTPUT"
 
       - name: Upload build log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Log-${{ env.OWRT_BASE }}-${{ env.PROFILE }}-${{ env.TARGET }}-${{ steps.meta.outputs.release }}
           path: openwrt/build.log
 
       - name: Upload firmware artifacts
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: HarryWrt-${{ env.OWRT_BASE }}-${{ env.PROFILE }}-${{ steps.meta.outputs.release }}-${{ env.TARGET }}
           path: |
-            ${{ steps.organize.outputs.output_dir }}/HarryWrt-*.img.gz
-            ${{ steps.organize.outputs.output_dir }}/SHA256SUMS
+            ${{ steps.organize.outputs.output_dir }}/HarryWrt-*
+            ${{ steps.organize.outputs.output_dir }}/SHA256SUMS-*
 
       - name: Publish GitHub Release (tag builds only)
         if: startsWith(github.ref, 'refs/tags/') && success()
@@ -374,59 +486,13 @@ jobs:
 
           PREFIX="HarryWrt-${OWRT_BASE}-${PROFILE}-${REL}-${TARGET}"
 
-          # Generate release notes based on profile
-          if [[ "${PROFILE}" == "plus" ]]; then
-            EDITION_LABEL="Plus Edition"
-            FEATURES=$(printf '%s\n' \
-              "- Argon theme included (default: Bootstrap)" \
-              "- Passwall2 offline-ready dependencies" \
-              "- WireGuard VPN (wireguard-tools + luci-app-wireguard)" \
-              "- DDNS (Cloudflare + No-IP scripts)" \
-              "- UPnP / NAT-PMP (miniupnpd-nftables, disabled by default)" \
-              "- Traffic monitoring (nlbwmon)" \
-              "- Wake-on-LAN" \
-              "- IPv6 support (odhcp6c + odhcpd)")
-          else
-            EDITION_LABEL="Clean Edition"
-            FEATURES=$(printf '%s\n' \
-              "- Argon theme included (default: Bootstrap)" \
-              "- Passwall2 offline-ready dependencies" \
-              "- IPv6 support (odhcp6c + odhcpd)")
-          fi
-
-          printf '%s\n' \
-            "## HarryWrt ${REL} — ${EDITION_LABEL}" \
-            "" \
-            "### Available Builds" \
-            "" \
-            "| OpenWrt | Profile | Platform | Filesystem | File |" \
-            "|---------|---------|----------|------------|------|" \
-            "| 24.10.7 | Clean | x86_64 | squashfs (UEFI) | HarryWrt-24.10.7-clean-${REL}-x86_64-squashfs-uefi.img.gz |" \
-            "| 24.10.7 | Clean | x86_64 | ext4 (UEFI) | HarryWrt-24.10.7-clean-${REL}-x86_64-ext4-uefi.img.gz |" \
-            "| 24.10.7 | Clean | aarch64 | squashfs | HarryWrt-24.10.7-clean-${REL}-aarch64-*.img.gz |" \
-            "| 24.10.7 | Plus | x86_64 | squashfs (UEFI) | HarryWrt-24.10.7-plus-${REL}-x86_64-squashfs-uefi.img.gz |" \
-            "| 24.10.7 | Plus | x86_64 | ext4 (UEFI) | HarryWrt-24.10.7-plus-${REL}-x86_64-ext4-uefi.img.gz |" \
-            "| 24.10.7 | Plus | aarch64 | squashfs | HarryWrt-24.10.7-plus-${REL}-aarch64-*.img.gz |" \
-            "| 25.12.4 | Clean | x86_64 | squashfs (UEFI) | HarryWrt-25.12.4-clean-${REL}-x86_64-squashfs-uefi.img.gz |" \
-            "| 25.12.4 | Clean | x86_64 | ext4 (UEFI) | HarryWrt-25.12.4-clean-${REL}-x86_64-ext4-uefi.img.gz |" \
-            "| 25.12.4 | Clean | aarch64 | squashfs | HarryWrt-25.12.4-clean-${REL}-aarch64-*.img.gz |" \
-            "| 25.12.4 | Plus | x86_64 | squashfs (UEFI) | HarryWrt-25.12.4-plus-${REL}-x86_64-squashfs-uefi.img.gz |" \
-            "| 25.12.4 | Plus | x86_64 | ext4 (UEFI) | HarryWrt-25.12.4-plus-${REL}-x86_64-ext4-uefi.img.gz |" \
-            "| 25.12.4 | Plus | aarch64 | squashfs | HarryWrt-25.12.4-plus-${REL}-aarch64-*.img.gz |" \
-            "" \
-            "> **Recommended for new installs:** 25.12.4 (apk) · For existing opkg setups: 24.10.7" \
-            "> **VM/PVE users:** use ext4-uefi image" \
-            "" \
-            "### ${EDITION_LABEL} Features" \
-            "${FEATURES}" \
-            "" \
-            "### Defaults" \
-            "- Hostname: HarryWrt" \
-            "- Timezone: UTC" \
-            "- LAN: 192.168.1.1" \
-            "" \
-            "SHA256SUMS included for integrity verification." \
-            > release_notes.txt
+          # One shared release for all editions and platforms: the notes
+          # come from a template (v3.1 wrote edition-specific notes, so the
+          # release was labelled with whichever edition finished first).
+          sed -e "s/{{REL}}/${REL}/g" \
+              -e "s/{{OWRT_24}}/${OWRT_24}/g" \
+              -e "s/{{OWRT_25}}/${OWRT_25}/g" \
+              "${GITHUB_WORKSPACE}/.github/RELEASE_TEMPLATE.md" > release_notes.txt
 
           # Create release if it doesn't exist (first matrix job to finish creates it)
           # Use --clobber-safe approach: attempt create and ignore "already exists" error
@@ -444,15 +510,9 @@ jobs:
             }
           fi
 
-          echo "Uploading assets for ${OWRT_BASE} / ${TARGET}..."
-          for f in ${PREFIX}-*.img.gz SHA256SUMS; do
-            if [ -f "$f" ]; then
-              # Avoid SHA256SUMS collision: rename per-variant
-              if [ "$f" = "SHA256SUMS" ]; then
-                cp -f "$f" "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}"
-                gh release upload "${TAG}" "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}" --repo "${REPO}" --clobber
-              else
-                gh release upload "${TAG}" "$f" --repo "${REPO}" --clobber
-              fi
-            fi
+          echo "Uploading assets for ${OWRT_BASE} / ${PROFILE} / ${TARGET}..."
+          shopt -s nullglob
+          assets=( "${PREFIX}"-* "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}" )
+          for f in "${assets[@]}"; do
+            gh release upload "${TAG}" "$f" --repo "${REPO}" --clobber
           done
