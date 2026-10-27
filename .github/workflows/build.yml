@@ -1,18 +1,22 @@
 # =============================================================
 # HarryWrt — Multi-version, Multi-platform, Multi-profile Build (matrix)
 #
-# Matrix: OpenWrt 24.10 + 25.12 × x86_64 + aarch64 × clean + plus
+# Matrix: OpenWrt 25.12 × 5 platforms × clean + plus (10 builds)
 #
-# OpenWrt versions are defined ONCE here (OWRT_24 / OWRT_25) and used by
-# the matrix and the release notes. Bump them for every service release —
-# they carry security fixes (e.g. 24.10.8 / 25.12.5 fix CVE-2026-53921, an
-# unauthenticated root RCE in odhcpd's DHCPv6 server).
+# The OpenWrt version is defined ONCE here (OWRT) and used by the matrix and
+# the release notes. Bump it for every service release — they carry
+# security fixes. OpenWrt 24.10 reached end of life on 2026-09-30 and is no
+# longer built (its last HarryWrt release is v4.0).
+#
+# Release assets: every build uploads its images plus ONE buildinfo archive
+# (package manifest, feeds/config/version buildinfo) as a workflow artifact.
+# A single "release" job then publishes all of them with one combined
+# SHA256SUMS, so the release page lists firmware, not dozens of small files.
 # =============================================================
 name: Build HarryWrt
 
 env:
-  OWRT_24: "24.10.8"
-  OWRT_25: "25.12.5"
+  OWRT: "25.12.6"
   # Only needed for the optional tmate SSH-debug action; all other actions
   # below are Node 24 majors.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -29,7 +33,7 @@ on:
         required: false
         default: "false"
       build_filter:
-        description: "Build filter (all / 24.10 / 25.12 / clean / plus / boards / x86_64 / aarch64 / rockchip / rpi4 / rpi5)"
+        description: "Build filter (all / clean / plus / boards / x86_64 / aarch64 / rockchip / rpi4 / rpi5)"
         required: false
         default: "all"
   push:
@@ -54,7 +58,7 @@ jobs:
           python3 - <<'PY'
           import json, os
 
-          versions = [os.environ["OWRT_24"], os.environ["OWRT_25"]]
+          version = os.environ["OWRT"]
           # target  = name used in file names and build_filter
           # arch    = OpenWrt target/subtarget (bin/targets/<arch>)
           # config  = configs/targets/<config>.config
@@ -67,24 +71,20 @@ jobs:
           ]
           target_names = [t["target"] for t in targets]
           jobs = [
-              dict(t, owrt_tag="v" + v, owrt_base=v, profile=p, runner="ubuntu-24.04")
-              for p in ("clean", "plus") for v in versions for t in targets
+              dict(t, owrt_tag="v" + version, owrt_base=version, profile=p, runner="ubuntu-24.04")
+              for p in ("clean", "plus") for t in targets
           ]
 
           f = os.environ.get("FILTER", "all").strip()
-          if f == "24.10":
-              jobs = [j for j in jobs if j["owrt_base"].startswith("24.")]
-          elif f == "25.12":
-              jobs = [j for j in jobs if j["owrt_base"].startswith("25.")]
-          elif f in target_names:
+          if f in target_names:
               jobs = [j for j in jobs if j["target"] == f]
           elif f == "boards":
               jobs = [j for j in jobs if j["target"] in ("rockchip", "rpi4", "rpi5")]
           elif f in ("clean", "plus"):
               jobs = [j for j in jobs if j["profile"] == f]
           elif f != "all":
-              raise SystemExit(f"Unknown build_filter '{f}' (use all / 24.10 / 25.12 / "
-                               "clean / plus / boards / " + " / ".join(target_names) + ")")
+              raise SystemExit(f"Unknown build_filter '{f}' (use all / clean / plus / boards / "
+                               + " / ".join(target_names) + ")")
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write("matrix=" + json.dumps({"include": jobs}, separators=(",", ":")) + "\n")
@@ -430,22 +430,35 @@ jobs:
           fi
 
           # Build transparency: exact package versions (manifest) and the
-          # exact feed commits / config used (buildinfo).
+          # exact feed commits / config used (buildinfo), bundled into ONE
+          # archive per build. v4.0 uploaded each as a separate release
+          # asset — 5 small files per build that looked like broken images.
+          BI_DIR="$(mktemp -d)/${PREFIX}-buildinfo"
+          mkdir -p "$BI_DIR"
           for f in openwrt-*"${SRC_TAG}"*.manifest; do
             rest="${f#*"${SRC_TAG}"}"
             if [[ "$rest" == "generic.manifest" ]]; then
-              cp -f "$f" "${PREFIX}.manifest"
+              cp -f "$f" "${BI_DIR}/${PREFIX}.manifest"
             else
-              cp -f "$f" "${PREFIX}-${rest}"
+              cp -f "$f" "${BI_DIR}/${PREFIX}-${rest}"
             fi
           done
           for f in feeds.buildinfo version.buildinfo config.buildinfo; do
-            [ -f "$f" ] && cp -f "$f" "${PREFIX}-${f}"
+            [ -f "$f" ] && cp -f "$f" "${BI_DIR}/${f}"
           done
+          if [[ -z "$(ls -A "$BI_DIR")" ]]; then
+            echo "ERROR: no manifest or buildinfo files found" >&2
+            exit 1
+          fi
+          # Reproducible archive: sorted names, fixed owner and mtime.
+          tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
+              -C "$(dirname "$BI_DIR")" -cf - "$(basename "$BI_DIR")" | gzip -n -9 > "${PREFIX}-buildinfo.tar.gz"
 
+          # Per-build checksums; the release job merges them into one SHA256SUMS.
           sha256sum "${PREFIX}"-* > "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}"
           echo "Output files:"
           ls -lah "${PREFIX}"-* "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}"
+          tar -tzf "${PREFIX}-buildinfo.tar.gz"
           {
             echo "### ${OWRT_BASE} ${PROFILE} ${TARGET}"
             [ -n "${HW_DEVICES:-}" ] && echo "Boards: ${HW_DEVICES}"
@@ -471,48 +484,73 @@ jobs:
             ${{ steps.organize.outputs.output_dir }}/HarryWrt-*
             ${{ steps.organize.outputs.output_dir }}/SHA256SUMS-*
 
-      - name: Publish GitHub Release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/') && success()
+  # ── Publish one release for all builds (tag builds only) ──
+  release:
+    needs: build
+    # Also runs when some builds failed: the successful ones are published
+    # and the job summary lists what is missing.
+    if: startsWith(github.ref, 'refs/tags/') && !cancelled()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download build outputs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: HarryWrt-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub Release
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_RESULT: ${{ needs.build.result }}
         run: |
           set -euo pipefail
-
           REPO="${{ github.repository }}"
           TAG="${GITHUB_REF##*/}"
-          REL="${{ steps.meta.outputs.release }}"
-          cd ${{ steps.organize.outputs.output_dir }}
+          REL="${TAG}"
+          cd dist
 
-          PREFIX="HarryWrt-${OWRT_BASE}-${PROFILE}-${REL}-${TARGET}"
-
-          # One shared release for all editions and platforms: the notes
-          # come from a template (v3.1 wrote edition-specific notes, so the
-          # release was labelled with whichever edition finished first).
-          sed -e "s/{{REL}}/${REL}/g" \
-              -e "s/{{OWRT_24}}/${OWRT_24}/g" \
-              -e "s/{{OWRT_25}}/${OWRT_25}/g" \
-              "${GITHUB_WORKSPACE}/.github/RELEASE_TEMPLATE.md" > release_notes.txt
-
-          # Create release if it doesn't exist (first matrix job to finish creates it)
-          # Use --clobber-safe approach: attempt create and ignore "already exists" error
-          if ! gh release view "${TAG}" --repo "${REPO}" >/dev/null 2>&1; then
-            gh release create "${TAG}" \
-              --repo "${REPO}" \
-              --title "HarryWrt ${REL}" \
-              --notes-file release_notes.txt || {
-              # Another parallel job may have created it first — verify it now exists
-              if ! gh release view "${TAG}" --repo "${REPO}" >/dev/null 2>&1; then
-                echo "ERROR: Failed to create or find release ${TAG}" >&2
-                exit 1
-              fi
-              echo "Release already created by another job, continuing..."
-            }
+          shopt -s nullglob
+          parts=( SHA256SUMS-* )
+          if [[ ${#parts[@]} -eq 0 ]]; then
+            echo "ERROR: no build outputs to publish" >&2
+            exit 1
           fi
 
-          echo "Uploading assets for ${OWRT_BASE} / ${PROFILE} / ${TARGET}..."
-          shopt -s nullglob
-          assets=( "${PREFIX}"-* "SHA256SUMS-${OWRT_BASE}-${PROFILE}-${TARGET}" )
-          for f in "${assets[@]}"; do
-            gh release upload "${TAG}" "$f" --repo "${REPO}" --clobber
-          done
+          # Verify every file against its per-build checksums, then merge
+          # them into a single SHA256SUMS for the release.
+          for p in "${parts[@]}"; do sha256sum -c --quiet "$p"; done
+          cat "${parts[@]}" | sort -k2 > SHA256SUMS
+          rm -f "${parts[@]}"
+
+          assets=( HarryWrt-*.img.gz HarryWrt-*-buildinfo.tar.gz SHA256SUMS )
+          echo "Publishing ${#assets[@]} assets (${#parts[@]} builds)"
+
+          {
+            echo "### Release ${TAG}"
+            echo "Builds published: ${#parts[@]} · assets: ${#assets[@]}"
+            if [[ "${BUILD_RESULT}" != "success" ]]; then
+              echo ""
+              echo "⚠️ Some builds failed — their files are missing from this release. Re-run the failed jobs, then re-run this job."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # The release may already exist (created in the GitHub UI together
+          # with the tag); its notes are then left untouched.
+          if ! gh release view "${TAG}" --repo "${REPO}" >/dev/null 2>&1; then
+            sed -e "s/{{REL}}/${REL}/g" \
+                -e "s/{{OWRT}}/${OWRT}/g" \
+                "${GITHUB_WORKSPACE}/.github/RELEASE_TEMPLATE.md" > release_notes.md
+            gh release create "${TAG}" --repo "${REPO}" \
+              --title "HarryWrt ${REL}" --notes-file release_notes.md
+          fi
+
+          gh release upload "${TAG}" "${assets[@]}" --repo "${REPO}" --clobber
+
+          if [[ "${BUILD_RESULT}" != "success" ]]; then
+            echo "::warning::Some builds failed; the release is incomplete"
+          fi

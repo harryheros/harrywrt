@@ -1,7 +1,7 @@
 ## HarryWrt {{REL}}
 
-Based on OpenWrt **{{OWRT_25}}** (apk, recommended) and **{{OWRT_24}}** (opkg).
-OpenWrt 24.10 reached end of life in September 2026 — {{OWRT_24}} is its final security update.
+Based on OpenWrt **{{OWRT}}** (apk package manager).
+OpenWrt 24.10 reached end of life on 30 September 2026 and is no longer built; HarryWrt v4.0 was its last release.
 
 ### Which file do I need?
 
@@ -19,7 +19,7 @@ File names: `HarryWrt-<OpenWrt>-<edition>-{{REL}}-<platform>-…img.gz`
 
 - **squashfs** (recommended): supports reset to defaults. **ext4**: fully writable, easier to resize.
 - **Upgrading** a device that already runs OpenWrt/HarryWrt: use the `sysupgrade` file (boards) or the same image (x86).
-- A board not listed for a given OpenWrt version is not supported by that release yet.
+- A board missing from this release is not supported by OpenWrt {{OWRT}}.
 
 ### Editions
 
@@ -34,4 +34,6 @@ File names: `HarryWrt-<OpenWrt>-<edition>-{{REL}}-<platform>-…img.gz`
 
 ### Verify
 
-Each build has a `SHA256SUMS-<OpenWrt>-<edition>-<platform>` file. `*.manifest` lists every package version; `*-feeds.buildinfo` records the exact feed commits used.
+`SHA256SUMS` covers every file in this release: `sha256sum -c --ignore-missing SHA256SUMS`.
+
+Each build also has a `…-buildinfo.tar.gz`: the package manifest (every package version) and the exact OpenWrt, feed and config details used — for reproducing a build or reporting a problem. You do not need it to install the firmware.

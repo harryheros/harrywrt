@@ -6,8 +6,10 @@ set -euo pipefail
 #
 # Usage: diy.sh <OWRT_VERSION> <TARGET> [PROFILE] [REL]
 #   TARGET: x86_64 | aarch64 | rockchip | rpi4 | rpi5
-#   e.g. diy.sh 24.10.8 x86_64 clean v3.2
-#        diy.sh 25.12.5 rockchip plus v3.2
+#   e.g. diy.sh 25.12.6 x86_64 clean v4.1
+#        diy.sh 25.12.6 rockchip plus v4.1
+#   OpenWrt 25.12 or newer (apk). 24.10 (opkg) reached end of life on
+#   2026-09-30 and is no longer supported; v4.0 was its last release.
 #
 # - Branding (banner / motd / DISTRIB_DESCRIPTION via base-files template)
 # - LuCI theme: Bootstrap (falls back to it if a kept theme is missing)
@@ -49,15 +51,13 @@ case "${PROFILE}" in
 esac
 
 # ------------------------------------------------------------
-# 0a) 25.12+: replace luci-app-opkg with luci-app-package-manager
-#     The config files use luci-app-opkg for compatibility with 24.10.
-#     On 25.12+, opkg is replaced by apk; swap the package in .config.
+# 0a) Version guard: everything below assumes apk (OpenWrt 25.12+).
 # ------------------------------------------------------------
-if [[ "${HARRYWRT_VER}" == 25.* ]]; then
-  if [ -f ".config" ]; then
-    sed -i 's/CONFIG_PACKAGE_luci-app-opkg=y/CONFIG_PACKAGE_luci-app-package-manager=y/' .config
-    echo "[patch] 25.12: luci-app-opkg -> luci-app-package-manager"
-  fi
+OWRT_MAJOR="${HARRYWRT_VER%%.*}"
+if ! [[ "$OWRT_MAJOR" =~ ^[0-9]+$ ]] || (( OWRT_MAJOR < 25 )); then
+  echo "ERROR: OpenWrt ${HARRYWRT_VER} is not supported (25.12 or newer required;" >&2
+  echo "       24.10 reached end of life on 2026-09-30, HarryWrt v4.0 was its last release)" >&2
+  exit 1
 fi
 
 # ------------------------------------------------------------
@@ -123,10 +123,7 @@ fi
 # 1) System defaults (hostname, timezone, NTP)
 #    Note: cronloglevel=7 is required for 25.12+
 # ------------------------------------------------------------
-CRONLOGLEVEL=5
-if [[ "${HARRYWRT_VER}" == 25.* ]]; then
-  CRONLOGLEVEL=7
-fi
+CRONLOGLEVEL=7
 
 cat > "${FILES_DIR}/etc/config/system" <<EOF
 config system
@@ -289,12 +286,11 @@ fi
 #
 #    The passwall_packages feed is added at build time to
 #    compile dependencies, but the URL gets baked into the
-#    firmware's apk/opkg repository config. Since OpenWrt's
+#    firmware's apk repository config. Since OpenWrt's
 #    official download server doesn't host this feed, apk
 #    will fail when refreshing repos (even for local installs).
 #    This script removes the phantom feed entry on first boot.
 # ------------------------------------------------------------
-if [[ "${HARRYWRT_VER}" == 25.* ]]; then
 cat > "${FILES_DIR}/etc/uci-defaults/91-clean-passwall-feed" <<'EOF'
 #!/bin/sh
 # Remove the build-time passwall_packages feed from OpenWrt's own feed
@@ -306,21 +302,10 @@ f=/etc/apk/repositories.d/distfeeds.list
 exit 0
 EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/91-clean-passwall-feed"
-else
-cat > "${FILES_DIR}/etc/uci-defaults/91-clean-passwall-feed" <<'EOF'
-#!/bin/sh
-# Remove passwall_packages feed — does not exist on official repos
-if [ -f /etc/opkg/distfeeds.conf ]; then
-  sed -i '/passwall_packages/d' /etc/opkg/distfeeds.conf
-fi
-exit 0
-EOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/91-clean-passwall-feed"
-fi
 
 # ------------------------------------------------------------
 # 9) First boot: replace LuCI package manager for local .apk
-#    install (25.12+ only) and install mirror auto-detect helper
+#    install and install mirror auto-detect helper
 #
 #    OpenWrt 25.12 switched from opkg to apk (Alpine Package
 #    Keeper). Unlike opkg, apk enforces signature verification
@@ -338,12 +323,12 @@ fi
 #      3) preserves the JSON output format LuCI expects
 # ------------------------------------------------------------
 
-# harrywrt-mirror-check: pre-installed for both 25.12 (apk) and 24.10 (opkg)
+# harrywrt-mirror-check: switch the apk feeds between the official server
+# and the TUNA mirror depending on which one is reachable
 mkdir -p "${FILES_DIR}/usr/bin"
-if [[ "${HARRYWRT_VER}" == 25.* ]]; then
 cat > "${FILES_DIR}/usr/bin/harrywrt-mirror-check" <<'EOF'
 #!/bin/sh
-# HarryWrt: auto-detect and switch apk mirror (25.12)
+# HarryWrt: auto-detect and switch apk mirror
 OFFICIAL="downloads.openwrt.org"
 MIRROR="mirrors.tuna.tsinghua.edu.cn/openwrt"
 if wget -q -O /dev/null --timeout=3 "https://${OFFICIAL}" 2>/dev/null; then
@@ -358,24 +343,8 @@ else
 	done
 fi
 EOF
-else
-cat > "${FILES_DIR}/usr/bin/harrywrt-mirror-check" <<'EOF'
-#!/bin/sh
-# HarryWrt: auto-detect and switch opkg mirror (24.10)
-OFFICIAL="downloads.openwrt.org"
-MIRROR="mirrors.tuna.tsinghua.edu.cn/openwrt"
-CONF="/etc/opkg/distfeeds.conf"
-[ -f "$CONF" ] || exit 0
-if wget -q -O /dev/null --timeout=3 "https://${OFFICIAL}" 2>/dev/null; then
-	sed -i "s|${MIRROR}|${OFFICIAL}|g" "$CONF"
-else
-	sed -i "s|${OFFICIAL}|${MIRROR}|g" "$CONF"
-fi
-EOF
-fi
 chmod 0755 "${FILES_DIR}/usr/bin/harrywrt-mirror-check"
 
-if [[ "${HARRYWRT_VER}" == 25.* ]]; then
 cat > "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager" <<'PATCHEOF'
 #!/bin/sh
 # HarryWrt: wrap LuCI's package-manager-call with a small shim.
@@ -481,40 +450,6 @@ grep -q 'HarryWrt package-manager shim' "$PMC" || {
 exit 0
 PATCHEOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager"
-else
-# 24.10 (opkg): mirror auto-detect at first boot.
-# Rather than patching package-manager-call with sed (unreliable against compressed lines),
-# we write a standalone mirror-check script and call it from the update uci-default directly.
-# The mirror state is written to distfeeds.conf; subsequent opkg update calls pick it up.
-cat > "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager" <<'PATCHEOF'
-#!/bin/sh
-# HarryWrt: install mirror auto-detect helper for opkg (24.10)
-# Called by /usr/bin/harrywrt-mirror-check before opkg update
-
-MIRROR_SCRIPT="/usr/bin/harrywrt-mirror-check"
-[ -f "$MIRROR_SCRIPT" ] && exit 0
-
-cat > "$MIRROR_SCRIPT" <<'EOF'
-#!/bin/sh
-OFFICIAL="downloads.openwrt.org"
-MIRROR="mirrors.tuna.tsinghua.edu.cn/openwrt"
-CONF="/etc/opkg/distfeeds.conf"
-[ -f "$CONF" ] || exit 0
-if wget -q -O /dev/null --timeout=3 "https://${OFFICIAL}" 2>/dev/null; then
-	sed -i "s|${MIRROR}|${OFFICIAL}|g" "$CONF"
-else
-	sed -i "s|${OFFICIAL}|${MIRROR}|g" "$CONF"
-fi
-EOF
-chmod 0755 "$MIRROR_SCRIPT"
-
-# Run once on first boot to set the correct mirror immediately
-"$MIRROR_SCRIPT" || true
-
-exit 0
-PATCHEOF
-chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager"
-fi
 
 # ------------------------------------------------------------
 # 10) Plus-only safe defaults
@@ -968,8 +903,7 @@ KEY=/etc/apk/keys/passwall.pub
 KEY_URL="https://sourceforge.net/projects/openwrt-passwall-build/files/apk.pub"
 
 if ! command -v apk >/dev/null 2>&1; then
-  echo "The Passwall2 signed repository is provided for apk (OpenWrt 25.12) only."
-  echo "On 24.10 install luci-app-passwall2_*.ipk from the Passwall2 GitHub releases."
+  echo "The Passwall2 signed repository needs apk (OpenWrt 25.12 or newer)."
   exit 1
 fi
 
