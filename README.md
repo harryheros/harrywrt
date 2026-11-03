@@ -4,317 +4,113 @@
 [![Platform](https://img.shields.io/badge/platform-x86__64%20%7C%20NanoPi%20%7C%20Raspberry%20Pi%20%7C%20ARM64%20VM-orange.svg)](#)
 [![Base](https://img.shields.io/badge/base-OpenWrt%2025.12.6-green.svg)](#)
 
-HarryWrt is a stable, extensible OpenWrt-based firmware available in two profiles: **Clean** for minimalism and upstream compatibility, and **Plus** for users who want a full-featured primary router experience out of the box.
-
-No bloat, no lock-in, no surprises — just a predictable and maintainable OpenWrt experience.
+A stable, predictable OpenWrt firmware in two editions. No bloat, no lock-in, no telemetry — fully compatible with upstream OpenWrt packages.
 
 ---
 
-## Profiles
+## Editions
 
-### Clean Edition
-Minimal base system for users who want full control over what runs on their router.
+| | **Clean** | **Plus** |
+|---|---|---|
+| For | Full control, servers and VMs | A primary home router, ready out of the box |
+| Base | LuCI (HTTPS), web terminal, dnsmasq-full, nftables with TProxy / TUN, IPv6 | Everything in Clean |
+| Extras | Network health page, multi-core tuning | WireGuard, DDNS, ACME, UPnP (off by default), traffic monitoring, Wake-on-LAN, TCP BBR |
+| Proxy engines | Not included | xray-core, sing-box, chinadns-ng and geo data, offline-ready |
+| Root partition | 768 MB | 1024 MB |
 
-- Clean base system — no unnecessary modifications
-- Fully compatible with upstream OpenWrt packages
-- No bundled proxy engines — a truly minimal base; add what you need yourself
-- Built-in WAN/DNS/IPv6 health check dashboard
-- Packages you install are reinstalled automatically after a firmware upgrade
-- Multi-core tuning out of the box (irqbalance + packet steering)
-
-### Plus Edition
-Stable enhanced firmware. Everything in Clean, plus:
-
-- WireGuard VPN, DDNS, UPnP / NAT-PMP, traffic monitoring (nlbwmon), Wake-on-LAN, network diagnostics
-- ACME / Let's Encrypt certificate management
-- Bundled proxy engines (xray-core, sing-box) and geo data, offline-ready for users who install a proxy LuCI app
-- TCP BBR congestion control for the router's own connections (faster proxy upstream)
-- UPnP disabled by default; all other components ready to configure on first boot
-- See [Included Components](#included-components) for full package list
-
-
----
-
-## Firmware Matrix
-
-Every platform is built for both editions on OpenWrt **25.12.6** (apk package manager).
-
-| Platform | Hardware | Images |
-|----------|----------|--------|
-| `x86_64` | PCs, mini PCs, soft routers, Proxmox/ESXi/QEMU VMs | squashfs / ext4 × BIOS / UEFI |
-| `rockchip` | FriendlyElec NanoPi R2S, R4S, R5C, R5S, R6C, R6S | one image per board (microSD) |
-| `rpi4` | Raspberry Pi 4 Model B / 400 / CM4 | factory (microSD) + sysupgrade |
-| `rpi5` | Raspberry Pi 5 | factory (microSD) + sysupgrade |
-| `aarch64` | ARM64 **virtual machines** / UEFI servers (Proxmox ARM, UTM, cloud) | combined EFI |
-
-> **OpenWrt 24.10 is no longer built.** It reached end of life on 30 September 2026 and gets no more security fixes; **HarryWrt v4.0** was its last release. To move a 24.10 device to 25.12, see [Upgrading](#upgrading).
-
-Root partition: 768 MB (Clean) / 1024 MB (Plus).
-
-> Board support comes from upstream OpenWrt. If a board is not supported by the current OpenWrt release, the release simply has no image for it — the build log and the release list show exactly which boards were built.
-
-### Which profile should I choose?
-
-**Clean** — If you want full control, plan to install only what you need, or are deploying in a server/VM environment where minimal footprint matters.
-
-**Plus** — If you want a primary home router with WireGuard VPN, DDNS, UPnP, and traffic monitoring ready to configure out of the box.
-
-### Which platform?
-
-**x86_64** — Soft routers, PCs, virtual machines (Proxmox/ESXi/QEMU), industrial mini-PCs. The images use a fixed-size root partition; to use the rest of a larger disk, expand it manually (`parted` and `resize2fs` are pre-installed — see the official OpenWrt guide on expanding the root partition on x86). In Proxmox/QEMU, enable the QEMU Guest Agent option — HarryWrt includes the agent and turns it on automatically inside VMs.
-
-**rockchip** — FriendlyElec NanoPi boards (R2S, R4S, R5C, R5S, R6C, R6S). Download the file with your board's name and write it to a microSD card (e.g. with balenaEtcher or Raspberry Pi Imager). All of these boards are 64-bit, including the R2S.
-
-**rpi4 / rpi5** — Raspberry Pi 4 (incl. 400 / CM4) and Raspberry Pi 5. Use the `factory` image for a fresh microSD card and the `sysupgrade` image to upgrade a Pi that already runs OpenWrt/HarryWrt.
-
-**aarch64 (armsr/armv8)** — Generic ARM64 UEFI image for **virtual machines** and UEFI servers only. It does **not** boot on NanoPi or Raspberry Pi boards (they have no UEFI firmware) — use the board images above.
+Both editions reinstall the packages you added yourself after a firmware upgrade.
 
 ---
 
 ## Downloads
 
-Firmware images are available on the GitHub Releases page:
+Images are on the [Releases page](https://github.com/harryheros/harrywrt/releases), built on OpenWrt **25.12.6** (apk package manager). Pick `clean` or `plus` in the file name.
 
-https://github.com/harryheros/harrywrt/releases
-
-Each release includes BIOS and UEFI images (x86_64), squashfs and ext4 variants, one `SHA256SUMS` file, and a `…-buildinfo.tar.gz` per build (package list and build details — not needed for installing).
-
-### Which file do I need?
-
-| Your hardware | File |
-|----------|------|
+| Hardware | File |
+|---|---|
 | PC / mini PC / soft router (UEFI) | `*-x86_64-squashfs-uefi.img.gz` |
 | Old PC (legacy BIOS) | `*-x86_64-squashfs-bios.img.gz` |
 | Proxmox / ESXi / QEMU VM | `*-x86_64-ext4-uefi.img.gz` |
-| NanoPi (R2S … R6S) | `*-rockchip-friendlyarm_nanopi-<model>-squashfs-sysupgrade.img.gz` |
-| Raspberry Pi 4 | `*-rpi4-rpi-4-squashfs-factory.img.gz` |
+| NanoPi R2S / R4S / R5C / R5S / R6C / R6S | `*-rockchip-friendlyarm_nanopi-<model>-squashfs-sysupgrade.img.gz` |
+| Raspberry Pi 4 / 400 / CM4 | `*-rpi4-rpi-4-squashfs-factory.img.gz` |
 | Raspberry Pi 5 | `*-rpi5-rpi-5-squashfs-factory.img.gz` |
-| ARM64 VM | `*-aarch64-squashfs-combined-efi.img.gz` |
+| ARM64 VM / UEFI server | `*-aarch64-squashfs-combined-efi.img.gz` |
 
-Pick `clean` or `plus` in the file name for the edition. **squashfs** is recommended (supports reset to defaults); **ext4** is fully writable.
+- **squashfs** is recommended (supports reset to defaults); **ext4** is fully writable.
+- NanoPi and Raspberry Pi: write the image to a microSD card (e.g. balenaEtcher). Raspberry Pi upgrades use the `sysupgrade` file.
+- The `aarch64` image is for virtual machines only; it does not boot on NanoPi or Raspberry Pi.
+- x86 images have a fixed root partition; to expand it, follow OpenWrt's guide on expanding the root partition on x86. `parted` is included; on v4.2 and earlier, add the other tools with `apk add resize2fs losetup`. In Proxmox / QEMU, enable the QEMU Guest Agent option.
+- A board missing from a release is not supported by that OpenWrt version.
+- OpenWrt 24.10 is end of life and no longer built; HarryWrt v4.0 was its last release.
 
----
-
-## Included Components
-
-### Web Interface
-LuCI (HTTPS), luci-compat, ttyd (Web Terminal)
-
-### Network Health
-Built-in WAN/DNS/IPv6 health check dashboard (Status → Network Health). Results are cached for 5 minutes; use **Refresh Now** to re-check. Available on all profiles and only to logged-in LuCI users.
-
-### Theme
-Bootstrap (official OpenWrt theme)
-
-### System Tools
-bash, curl, wget-ssl, unzip, htop, openssl-util, ca-bundle
-
-### Network Utilities
-ip-full, iperf3, tcpdump, ethtool, resolveip
-
-### Firewall / Kernel
-nftables (fw4), kmod-tun, nft TProxy, nft-socket, nft-nat. Plus additionally includes the iptables-nft compatibility layer and ipt TProxy modules (Passwall2 iptables fallback mode).
-
-### Performance
-irqbalance and packet steering are enabled on first boot, spreading network load across all CPU cores.
-
-### Proxy Engines (Plus edition only)
-The **Plus** edition bundles, offline-ready: xray-core, sing-box, geoview, v2ray-geoip, v2ray-geosite, tcping and their runtime libs. The **Clean** edition does not include these — install them yourself if needed. On either edition, a proxy LuCI app (if desired) is installed separately after first boot.
-
-### Plus Edition — Additional Components
-
-| Component | Package(s) | Notes |
-|-----------|-----------|-------|
-| WireGuard VPN | kmod-wireguard, wireguard-tools, luci-app-wireguard, qrencode | QR code peer export supported |
-| DDNS | ddns-scripts, luci-app-ddns, ddns-scripts-cloudflare, ddns-scripts-noip | Requires configuration to activate |
-| UPnP / NAT-PMP | miniupnpd-nftables, luci-app-upnp | Disabled by default; enable in LuCI → Services → UPnP |
-| TCP BBR | kmod-tcp-bbr | Enabled by default for the router's own connections |
-| Traffic monitoring | nlbwmon, luci-app-nlbwmon | Per-device bandwidth tracking |
-| Wake-on-LAN | etherwake, luci-app-wol | |
-| Network diagnostics | mtr-json | |
-| ACME / Let's Encrypt | acme, luci-app-acme | Certificate management for HTTPS services |
+**Verify** a download: put `SHA256SUMS` next to the image and run `sha256sum -c --ignore-missing SHA256SUMS` (macOS: `shasum -a 256 -c --ignore-missing SHA256SUMS`). Each build's `…-buildinfo.tar.gz` lists every package and the exact sources used; it is not needed to install.
 
 ---
 
-## Default Settings
+## First boot
 
-- Hostname: HarryWrt
-- Timezone: UTC
-- LAN IP: 192.168.1.1
-- User: root
-- Password: unset on first boot
-- NTP: enabled (0-3.openwrt.pool.ntp.org)
+Connect to LAN (DHCP is on) and open **https://192.168.1.1**. Log in as `root`, set a password first. A browser certificate warning is expected (self-signed).
 
----
-
-## First Access
-
-After boot, connect via LAN (DHCP enabled) and open https://192.168.1.1
-
-Set a password on first login before further configuration.
-
-> Browser SSL warnings are expected (self-signed certificate).
-
+Defaults: hostname `HarryWrt`, timezone UTC, NTP on. The network health page is under Status → Network Health.
 
 ---
 
 ## Upgrading
 
-1. Download the new `.img.gz` from the [Releases page](https://github.com/harryheros/harrywrt/releases)
-2. LuCI → System → Backup / Flash Firmware → Flash new firmware
-3. Upload the `.img.gz` file
-4. Choose whether to keep settings:
-   - **Same OpenWrt version** (e.g. HarryWrt v3.0 → v3.1) — keeping settings is safe
-   - **From a 24.10-based build** (any HarryWrt built on OpenWrt 24.10) — do not keep settings; config format may have changed
-5. Wait for reboot
+LuCI → System → Backup / Flash Firmware → upload the new `.img.gz`.
 
-### Your packages come back automatically
+- **Same OpenWrt version**: keep settings.
+- **From a 24.10-based build**: do not keep settings.
 
-HarryWrt remembers the packages you installed yourself (AdGuard Home, Passwall2, …) in `/etc/harrywrt/user-packages.list`, which is kept across firmware upgrades. On the first boot of the new firmware, once the network is up, they are reinstalled from the package feeds in the background. Keep settings when flashing so the list is preserved.
-
-- Progress and results: `/etc/harrywrt/restore.log` (also in the system log, tag `harrywrt`).
-- A package that is not available in the configured feeds (e.g. Passwall2 installed from an uploaded file) is retried at every boot until it succeeds. Enable the Passwall2 repository (below) and run `harrywrt-pkg-restore` to reinstall it right away, or delete `/etc/harrywrt/pending-packages.list` to stop retrying.
-- Moving from 24.10 to 25.12 works too (package names are the same); since settings should not be kept across that jump, back up `/etc/harrywrt/user-packages.list` yourself and copy it back before the first reboot if you want the automatic reinstall.
+**Your packages come back.** Packages you installed yourself are listed in `/etc/harrywrt/user-packages.list`, kept across upgrades, and reinstalled in the background on first boot (log: `/etc/harrywrt/restore.log`). A package not in the feeds, such as an uploaded file, is retried at every boot; run `harrywrt-pkg-restore` to retry now, or delete `/etc/harrywrt/pending-packages.list` to stop. When moving from 24.10, back up `user-packages.list` and copy it back before the first reboot.
 
 ---
 
-## Installing a Proxy LuCI App
+## Installing packages
 
-On the **Plus** edition, the required dependencies (xray-core, sing-box, geoview, v2ray-geoip, v2ray-geosite, tcping, etc.) are already pre-installed, so you only need to install the LuCI app itself. On the **Clean** edition, install those dependencies yourself first (or use the Plus edition).
+Install anything from LuCI (System → Software) or with `apk`. If `downloads.openwrt.org` is unreachable, HarryWrt switches to the TUNA mirror automatically and switches back when it recovers (`harrywrt-mirror-check` runs it by hand).
 
-### Recommended: signed Passwall2 repository
+### Passwall2
 
-One command adds the official Passwall2 package repository and its signing key, so Passwall2 installs **and updates** through the normal package manager with signature verification:
+The Plus edition already has the proxy engines; on Clean, install them first.
+
+**Recommended — signed repository** (installs and updates through the package manager):
 
 ```sh
-harrywrt-passwall-repo enable
+harrywrt-passwall-repo enable      # also: status, disable
 apk add luci-app-passwall2
 ```
 
-`harrywrt-passwall-repo status` shows the configured feeds; `harrywrt-passwall-repo disable` removes them.
+Updates then appear under System → Software → Updates. Passwall2's own App Update page updates the proxy cores only, not Passwall2 itself.
 
-### Updating Passwall2
+**Or upload the file**: download `luci-app-passwall2_VERSION_all.apk` (not `.ipk`) from [Passwall2 Releases](https://github.com/Openwrt-Passwall/openwrt-passwall2/releases), then System → Software → Upload Package. HarryWrt allows unsigned uploads; missing dependencies come from the official feeds. Command line: `apk add --allow-untrusted ./luci-app-passwall2_VERSION_all.apk`.
 
-Passwall2's own **App Update** page updates the proxy cores (Xray, sing-box, …) but not Passwall2 itself — it shows the latest version and says automatic update is not supported. This is how Passwall2 works upstream. To update Passwall2:
+### AdGuard Home
 
-- **With the signed repository enabled** (above): System → Software → **Updates** lists the new version; click **Upgrade**. Or run `apk update && apk upgrade luci-app-passwall2`.
-- **Without it:** upload the new `.apk` as described below; the same steps install and upgrade.
-
-### Alternative: upload the package file
-
-1. Download `luci-app-passwall2_VERSION_all.apk` from [Passwall2 Releases](https://github.com/Openwrt-Passwall/openwrt-passwall2/releases)
-2. In LuCI: System → Software → Upload Package → select the `.apk` file → Install
-3. Refresh browser, Passwall2 appears under Services menu
-
-> **Note:** HarryWrt lets LuCI install uploaded `.apk` files (which are not signed by an OpenWrt key). Missing dependencies are fetched from the official feeds when the router is online. Since v4.2 this keeps working after LuCI's package manager itself is updated (v4.1 then failed with `UNTRUSTED signature`). From the command line the equivalent is `apk add --allow-untrusted ./luci-app-passwall2_VERSION_all.apk`.
-
-> **Important:** Download the `.apk` format, not `.ipk` — `.ipk` files are for OpenWrt 24.10 and older.
-
-### Mirror auto-detection
-
-HarryWrt includes a built-in mirror auto-detection helper (`harrywrt-mirror-check`). On first boot, and on every package list update, HarryWrt tests connectivity to `downloads.openwrt.org`. If the official server is unreachable, it automatically switches the repository configuration to the TUNA mirror (`mirrors.tuna.tsinghua.edu.cn/openwrt`) and restores the official server when it becomes reachable again.
-
-This runs transparently; no manual configuration is needed.
-
-If you need to switch or restore manually:
-
-```sh
-# Let the helper auto-detect and set the correct source
-/usr/bin/harrywrt-mirror-check
-
-# Switch to TUNA mirror manually
-sed -i 's_downloads.openwrt.org_mirrors.tuna.tsinghua.edu.cn/openwrt_g' /etc/apk/repositories.d/distfeeds.list
-
-# Restore official source
-sed -i 's_mirrors.tuna.tsinghua.edu.cn/openwrt_downloads.openwrt.org_g' /etc/apk/repositories.d/distfeeds.list
-```
-
----
-
-## Installing AdGuard Home
-
-AdGuard Home is not pre-installed in HarryWrt. Install it directly from the package repository when needed.
+AdGuard Home needs port 53, so move dnsmasq to 5353 first:
 
 ```sh
 apk update && apk add adguardhome
+uci set dhcp.@dnsmasq[0].port='5353' && uci commit dhcp && /etc/init.d/dnsmasq restart
+/etc/init.d/adguardhome enable && /etc/init.d/adguardhome start
 ```
 
-### After installation
-
-AdGuard Home and dnsmasq both try to bind port 53. You need to move dnsmasq off port 53 before starting AdGuard Home, or they will conflict:
-
-```sh
-# Move dnsmasq to port 5353 (keeps DHCP and local DNS working)
-uci set dhcp.@dnsmasq[0].port='5353'
-uci commit dhcp
-/etc/init.d/dnsmasq restart
-
-# Start AdGuard Home
-/etc/init.d/adguardhome enable
-/etc/init.d/adguardhome start
-```
-
-Then open `http://192.168.1.1:3000` to complete the AdGuard Home setup wizard.
-
-> If something goes wrong, restore dnsmasq to port 53 with:
-> ```sh
-> uci delete dhcp.@dnsmasq[0].port
-> uci commit dhcp
-> /etc/init.d/dnsmasq restart
-> /etc/init.d/adguardhome stop
-> /etc/init.d/adguardhome disable
-> ```
+Then finish setup at `http://192.168.1.1:3000`. To undo: `uci delete dhcp.@dnsmasq[0].port && uci commit dhcp && /etc/init.d/dnsmasq restart`, then stop and disable `adguardhome`.
 
 ---
 
-## Customization
+## Included packages
 
-HarryWrt remains fully compatible with upstream OpenWrt. Install additional packages via LuCI (Web UI) or the command line (`apk`).
+**Both editions**: LuCI (HTTPS), luci-compat, Bootstrap theme, ttyd, bash, nano, curl, wget-ssl, unzip, htop, openssl-util, ca-bundle, ip-full, iperf3, tcpdump, ethtool, resolveip, dnsmasq-full, nftables (fw4) with kmod-tun, TProxy, socket and NAT modules, irqbalance.
 
----
-
-## Integrity Verification
-
-Each release has one `SHA256SUMS` file covering every file in it. Download it into the same directory as the `.img.gz` you downloaded, then verify:
-
-```sh
-cd ~/Downloads
-sha256sum -c --ignore-missing SHA256SUMS
-```
-
-`--ignore-missing` checks only the files you actually downloaded (on macOS: `shasum -a 256 -c --ignore-missing SHA256SUMS`).
-
-Each build also has a `…-buildinfo.tar.gz`: the package manifest (every package and version in the image) and the exact feed commits, OpenWrt revision and configuration used, so any image can be audited or rebuilt. It is not needed to install the firmware.
-
----
-
-## Disclaimer
-
-HarryWrt is provided as-is without warranty. This firmware contains no telemetry, hidden services, or proprietary components. Users are responsible for their own deployments and configurations.
+**Plus adds**: WireGuard (with QR export), DDNS (Cloudflare, No-IP), ACME / Let's Encrypt, miniupnpd, nlbwmon, Wake-on-LAN, mtr, TCP BBR, iptables-nft compatibility with TProxy modules, xray-core, sing-box, chinadns-ng, geoview, v2ray-geoip, v2ray-geosite, tcping.
 
 ---
 
 ## License
 
-HarryWrt follows the OpenWrt licensing model and is distributed under GPL-2.0.
+GPL-2.0, following the OpenWrt licensing model. Provided as-is, without warranty; no telemetry, hidden services or proprietary components.
 
-All modifications and distributed binaries comply with upstream OpenWrt licensing requirements.
-
----
-
-## Credits
-
-- OpenWrt Project
-- LuCI Project
-- Passwall2 (Openwrt-Passwall Organization)
-- AdGuard Home (AdGuard)
-
----
-
-## Author
-
-Maintained by: harryheros
-
----
+Credits: OpenWrt, LuCI, Passwall2 (Openwrt-Passwall), AdGuard Home (AdGuard).
 
 Part of the [Nova infrastructure toolkit](https://github.com/harryheros).
