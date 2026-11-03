@@ -193,13 +193,20 @@ apk add luci-app-passwall2
 
 `harrywrt-passwall-repo status` shows the configured feeds; `harrywrt-passwall-repo disable` removes them.
 
+### Updating Passwall2
+
+Passwall2's own **App Update** page updates the proxy cores (Xray, sing-box, …) but not Passwall2 itself — it shows the latest version and says automatic update is not supported. This is how Passwall2 works upstream. To update Passwall2:
+
+- **With the signed repository enabled** (above): System → Software → **Updates** lists the new version; click **Upgrade**. Or run `apk update && apk upgrade luci-app-passwall2`.
+- **Without it:** upload the new `.apk` as described below; the same steps install and upgrade.
+
 ### Alternative: upload the package file
 
 1. Download `luci-app-passwall2_VERSION_all.apk` from [Passwall2 Releases](https://github.com/Openwrt-Passwall/openwrt-passwall2/releases)
 2. In LuCI: System → Software → Upload Package → select the `.apk` file → Install
 3. Refresh browser, Passwall2 appears under Services menu
 
-> **Note:** HarryWrt lets LuCI install uploaded `.apk` files (which are not signed by an OpenWrt key). Missing dependencies are fetched from the official feeds when the router is online.
+> **Note:** HarryWrt lets LuCI install uploaded `.apk` files (which are not signed by an OpenWrt key). Missing dependencies are fetched from the official feeds when the router is online. Since v4.2 this keeps working after LuCI's package manager itself is updated (v4.1 then failed with `UNTRUSTED signature`). From the command line the equivalent is `apk add --allow-untrusted ./luci-app-passwall2_VERSION_all.apk`.
 
 > **Important:** Download the `.apk` format, not `.ipk` — `.ipk` files are for OpenWrt 24.10 and older.
 

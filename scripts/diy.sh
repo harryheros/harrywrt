@@ -345,9 +345,16 @@ fi
 EOF
 chmod 0755 "${FILES_DIR}/usr/bin/harrywrt-mirror-check"
 
-cat > "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager" <<'PATCHEOF'
+mkdir -p "${FILES_DIR}/usr/libexec" "${FILES_DIR}/etc/apk/commit_hooks.d" "${FILES_DIR}/etc/init.d"
+cat > "${FILES_DIR}/usr/libexec/harrywrt-pm-shim" <<'PATCHEOF'
 #!/bin/sh
-# HarryWrt: wrap LuCI's package-manager-call with a small shim.
+# HarryWrt: wrap LuCI's package-manager-call with a small shim (idempotent).
+#
+# v4.2: runs on first boot, on every boot and after every apk transaction
+# (/etc/apk/commit_hooks.d). Upgrading luci-app-package-manager replaces
+# /usr/libexec/package-manager-call with the upstream file; v4.1 patched it
+# only once at first boot, so after such an upgrade uploading a .apk failed
+# again with "UNTRUSTED signature".
 #
 # v3.1 replaced the whole upstream script with a frozen copy, so any change
 # LuCI made to it in a 25.12.x update was silently lost (or broke the
@@ -447,8 +454,39 @@ grep -q 'HarryWrt package-manager shim' "$PMC" || {
 	cp -f "$UP" "$PMC"
 	exit 1
 }
+logger -t harrywrt "package-manager shim (re)installed" 2>/dev/null
 exit 0
 PATCHEOF
+chmod 0755 "${FILES_DIR}/usr/libexec/harrywrt-pm-shim"
+
+# Re-apply after every apk transaction (e.g. an upgrade of
+# luci-app-package-manager that restores the upstream script).
+cat > "${FILES_DIR}/etc/apk/commit_hooks.d/90-harrywrt-pm-shim" <<'HOOKEOF'
+#!/bin/sh
+[ "$1" = "post-commit" ] && [ -x /usr/libexec/harrywrt-pm-shim ] && /usr/libexec/harrywrt-pm-shim >/dev/null 2>&1
+exit 0
+HOOKEOF
+chmod 0755 "${FILES_DIR}/etc/apk/commit_hooks.d/90-harrywrt-pm-shim"
+
+# ... and on every boot, in case a package was changed with --no-commit-hooks.
+cat > "${FILES_DIR}/etc/init.d/harrywrt-pm-shim" <<'INITEOF'
+#!/bin/sh /etc/rc.common
+# HarryWrt: keep the LuCI package-manager shim in place
+START=95
+boot() {
+	/usr/libexec/harrywrt-pm-shim
+}
+start() {
+	/usr/libexec/harrywrt-pm-shim
+}
+INITEOF
+chmod 0755 "${FILES_DIR}/etc/init.d/harrywrt-pm-shim"
+
+cat > "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager" <<'UDEOF'
+#!/bin/sh
+/etc/init.d/harrywrt-pm-shim enable >/dev/null 2>&1
+/usr/libexec/harrywrt-pm-shim
+UDEOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/92-patch-package-manager"
 
 # ------------------------------------------------------------
