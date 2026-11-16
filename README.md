@@ -15,7 +15,7 @@ A stable, predictable OpenWrt firmware in two editions. No bloat, no lock-in, no
 | For | Full control, servers and VMs | A primary home router, ready out of the box |
 | Base | LuCI (HTTPS), web terminal, dnsmasq-full, nftables with TProxy / TUN, IPv6 | Everything in Clean |
 | Extras | Network health page, multi-core tuning | WireGuard, DDNS, ACME, UPnP (off by default), traffic monitoring, Wake-on-LAN, TCP BBR |
-| Proxy engines | Not included | xray-core, sing-box, chinadns-ng and geo data, offline-ready |
+| Network cores | Not included | xray-core, sing-box and geo data, so LuCI apps that use them install offline |
 | Root partition | 768 MB | 1024 MB |
 
 Both editions reinstall the packages you added yourself after a firmware upgrade.
@@ -70,20 +70,9 @@ LuCI → System → Backup / Flash Firmware → upload the new `.img.gz`.
 
 Install anything from LuCI (System → Software) or with `apk`. If `downloads.openwrt.org` is unreachable, HarryWrt switches to the TUNA mirror automatically and switches back when it recovers (`harrywrt-mirror-check` runs it by hand).
 
-### Passwall2
+### Third-party packages
 
-The Plus edition already has the proxy engines; on Clean, install them first.
-
-**Recommended — signed repository** (installs and updates through the package manager):
-
-```sh
-harrywrt-passwall-repo enable      # also: status, disable
-apk add luci-app-passwall2
-```
-
-Updates then appear under System → Software → Updates. Passwall2's own App Update page updates the proxy cores only, not Passwall2 itself.
-
-**Or upload the file**: download `luci-app-passwall2_VERSION_all.apk` (not `.ipk`) from [Passwall2 Releases](https://github.com/Openwrt-Passwall/openwrt-passwall2/releases), then System → Software → Upload Package. HarryWrt allows unsigned uploads; missing dependencies come from the official feeds. Command line: `apk add --allow-untrusted ./luci-app-passwall2_VERSION_all.apk`.
+Packages that are not in the official feeds can be uploaded under System → Software → Upload Package (use `.apk`, not `.ipk`); HarryWrt allows unsigned uploads, and missing dependencies come from the official feeds. Command line: `apk add --allow-untrusted ./PACKAGE.apk`. A repository you add to `/etc/apk/repositories.d/customfeeds.list` is kept across firmware upgrades.
 
 ### AdGuard Home
 
@@ -111,6 +100,6 @@ Then finish setup at `http://192.168.1.1:3000`. To undo: `uci delete dhcp.@dnsma
 
 GPL-2.0, following the OpenWrt licensing model. Provided as-is, without warranty; no telemetry, hidden services or proprietary components.
 
-Credits: OpenWrt, LuCI, Passwall2 (Openwrt-Passwall), AdGuard Home (AdGuard).
+Credits: OpenWrt, LuCI, the Openwrt-Passwall package feed (network cores), AdGuard Home (AdGuard).
 
 Part of the [Nova infrastructure toolkit](https://github.com/harryheros).

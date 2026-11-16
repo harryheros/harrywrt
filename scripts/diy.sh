@@ -20,7 +20,6 @@ set -euo pipefail
 # - Network health page (LuCI, rpcd ACL)
 # - irqbalance + packet steering; qemu-ga only inside VMs
 # - Reinstall user packages after firmware upgrades
-# - harrywrt-passwall-repo: signed Passwall2 apk repository
 # - [plus only] UPnP disabled by default, TCP BBR
 # =============================================================
 
@@ -294,9 +293,9 @@ fi
 cat > "${FILES_DIR}/etc/uci-defaults/91-clean-passwall-feed" <<'EOF'
 #!/bin/sh
 # Remove the build-time passwall_packages feed from OpenWrt's own feed
-# list only. customfeeds.list is left alone: it may hold the signed
-# Passwall2 repository added with `harrywrt-passwall-repo enable`
-# (v3.1 cleaned every *.list and would have wiped it on each upgrade).
+# list only. customfeeds.list is left alone: it holds the repositories
+# users added themselves (v3.1 cleaned every *.list and would have wiped
+# them on each upgrade).
 f=/etc/apk/repositories.d/distfeeds.list
 [ -f "$f" ] && sed -i '/passwall_packages/d' "$f"
 exit 0
@@ -817,7 +816,7 @@ fi
 {
   installed_explicit | grep -vxF -f "$BASE"
   # Packages that could not be reinstalled yet stay on the list, so they
-  # are retried (e.g. once the Passwall2 repository has been enabled).
+  # are retried (e.g. once a repository the user adds is enabled).
   [ -s "$PENDING" ] && cat "$PENDING"
 } | sort -u > "$LIST.tmp"
 if [ "$(cat "$LIST.tmp")" != "$(cat "$LIST" 2>/dev/null)" ]; then
@@ -926,67 +925,5 @@ grep -q 'harrywrt-pkg-snapshot' /etc/crontabs/root || \
 exit 0
 EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/80-harrywrt-pkg-restore"
-
-# ------------------------------------------------------------
-# 17) One-command Passwall2 signed repository (25.12 / apk)
-#     Follows the Passwall2 README; lets users install and UPDATE
-#     Passwall2 with signature verification instead of uploading
-#     unsigned .apk files.
-# ------------------------------------------------------------
-cat > "${FILES_DIR}/usr/sbin/harrywrt-passwall-repo" <<'EOF'
-#!/bin/sh
-# harrywrt-passwall-repo enable | disable | status
-FEEDS=/etc/apk/repositories.d/customfeeds.list
-KEY=/etc/apk/keys/passwall.pub
-KEY_URL="https://sourceforge.net/projects/openwrt-passwall-build/files/apk.pub"
-
-if ! command -v apk >/dev/null 2>&1; then
-  echo "The Passwall2 signed repository needs apk (OpenWrt 25.12 or newer)."
-  exit 1
-fi
-
-. /etc/openwrt_release
-release="${DISTRIB_RELEASE%.*}"
-arch="$DISTRIB_ARCH"
-BASE="https://sourceforge.net/projects/openwrt-passwall-build/files/releases/packages-${release}/${arch}"
-
-case "$1" in
-enable)
-  tmp="$(mktemp)"
-  if ! wget -q -O "$tmp" "$KEY_URL" || ! grep -q -- '-----BEGIN PUBLIC KEY-----' "$tmp"; then
-    rm -f "$tmp"
-    echo "Could not download a valid Passwall2 signing key from $KEY_URL" >&2
-    exit 1
-  fi
-  mkdir -p /etc/apk/keys /etc/apk/repositories.d
-  mv -f "$tmp" "$KEY"
-  touch "$FEEDS"
-  sed -i '/openwrt-passwall-build/d' "$FEEDS"
-  for feed in passwall_packages passwall_luci passwall2; do
-    echo "${BASE}/${feed}/packages.adb" >> "$FEEDS"
-  done
-  echo "Passwall2 repository added for ${release} / ${arch}. Updating package index..."
-  apk update
-  echo "Install with:  apk add luci-app-passwall2"
-  ;;
-disable)
-  [ -f "$FEEDS" ] && sed -i '/openwrt-passwall-build/d' "$FEEDS"
-  rm -f "$KEY"
-  echo "Passwall2 repository removed."
-  ;;
-status)
-  if grep -qs 'openwrt-passwall-build' "$FEEDS"; then
-    echo "enabled:"; grep 'openwrt-passwall-build' "$FEEDS"
-  else
-    echo "disabled"
-  fi
-  ;;
-*)
-  echo "Usage: harrywrt-passwall-repo enable | disable | status"
-  exit 2
-  ;;
-esac
-EOF
-chmod 0755 "${FILES_DIR}/usr/sbin/harrywrt-passwall-repo"
 
 echo "DIY script executed successfully for OpenWrt ${HARRYWRT_VER} / ${TARGET} / ${PROFILE}."

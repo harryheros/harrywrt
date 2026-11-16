@@ -25,7 +25,7 @@ File names: `HarryWrt-<OpenWrt>-<edition>-{{REL}}-<platform>-…img.gz`
 
 **Clean** — LuCI (HTTPS), dnsmasq-full, nftables transparent-proxy kernel (TProxy/TUN), IPv6, network health page, irqbalance.
 
-**Plus** — Clean + everything Passwall2 needs to install offline (Xray, sing-box, chinadns-ng, geodata), WireGuard, DDNS + ACME, UPnP (off by default), traffic statistics, Wake-on-LAN, TCP BBR.
+**Plus** — Clean + network cores (Xray, sing-box, geodata) for LuCI apps that use them, WireGuard, DDNS + ACME, UPnP (off by default), traffic statistics, Wake-on-LAN, TCP BBR.
 
 ### Defaults
 
