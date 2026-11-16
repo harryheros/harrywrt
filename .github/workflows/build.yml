@@ -25,9 +25,9 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "Release version (e.g. v3.2)"
-        required: true
-        default: "v3.2"
+        description: "Version for the banner and file names (empty = the latest v* tag)"
+        required: false
+        default: ""
       ssh_debug:
         description: "Enable SSH debug session (tmate)"
         required: false
@@ -117,10 +117,27 @@ jobs:
       - name: Determine release version
         id: meta
         shell: bash
+        env:
+          INPUT_RELEASE: ${{ github.event.inputs.release_version }}
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            rel="${{ github.event.inputs.release_version }}"
+            rel="${INPUT_RELEASE:-}"
+            if [[ -z "$rel" ]]; then
+              # No version entered: the latest v* tag, so a manual build is
+              # never labelled with a stale default.
+              rel="$(git ls-remote --tags --refs origin 'v*' \
+                | sed 's#.*refs/tags/##' | sort -V | tail -n 1)"
+              if [[ -z "$rel" ]]; then
+                echo "ERROR: no v* tag found; enter a release version." >&2
+                exit 1
+              fi
+              echo "No version entered; using the latest tag: $rel"
+            fi
+            if [[ ! "$rel" =~ ^v[0-9][0-9A-Za-z.+-]*$ ]]; then
+              echo "ERROR: release version '$rel' must look like v4.2 or v4.2-rc1." >&2
+              exit 1
+            fi
           else
             tag="${GITHUB_REF##*/}"
             # Accept any tag starting with 'v' followed by a digit; use the
