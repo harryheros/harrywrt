@@ -2,7 +2,7 @@
 
 > OpenWrt-based firmware in two editions: stable and predictable, with no bloat, no lock-in and no telemetry.
 
-[![Version](https://img.shields.io/github/v/release/harryheros/harrywrt?label=version&color=blue)](https://github.com/harryheros/harrywrt/releases)
+[![Version](https://img.shields.io/badge/version-v4.2.1-blue.svg)](https://github.com/harryheros/harrywrt/releases)
 [![Base](https://img.shields.io/badge/base-OpenWrt%2025.12.6-green.svg)](#downloads)
 [![License](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](#license)
 [![Platform](https://img.shields.io/badge/platform-x86__64%20%7C%20NanoPi%20%7C%20Raspberry%20Pi%20%7C%20ARM64%20VM-orange.svg)](#downloads)
