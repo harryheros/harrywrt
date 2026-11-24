@@ -557,13 +557,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           # The release may already exist (created in the GitHub UI together
-          # with the tag); its notes are then left untouched.
+          # with the tag); its notes are then left untouched. Otherwise the
+          # notes are the tag's CHANGELOG.md entry (scripts/release_notes.py).
           if ! gh release view "${TAG}" --repo "${REPO}" >/dev/null 2>&1; then
-            sed -e "s/{{REL}}/${REL}/g" \
-                -e "s/{{OWRT}}/${OWRT}/g" \
-                "${GITHUB_WORKSPACE}/.github/RELEASE_TEMPLATE.md" > release_notes.md
+            python3 "${GITHUB_WORKSPACE}/scripts/release_notes.py" "${TAG}" > release_notes.md
             gh release create "${TAG}" --repo "${REPO}" \
-              --title "HarryWrt ${REL}" --notes-file release_notes.md
+              --title "${REL} — OpenWrt ${OWRT}" --notes-file release_notes.md
           fi
 
           gh release upload "${TAG}" "${assets[@]}" --repo "${REPO}" --clobber

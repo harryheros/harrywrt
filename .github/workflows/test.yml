@@ -1,0 +1,25 @@
+# Checks only: this workflow never builds firmware (build.yml runs on v* tags).
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Release notes and CHANGELOG
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Shell scripts
+        run: |
+          bash -n scripts/diy.sh
+          shellcheck scripts/diy.sh

@@ -709,9 +709,9 @@ EOF
 chmod 0755 "${FILES_DIR}/etc/uci-defaults/52-harrywrt-health-cleanup"
 
 # ------------------------------------------------------------
-# 12) RootFS auto-expand — removed in v3.2.
+# 12) RootFS auto-expand — removed in v4.0.0.
 #
-#     The v3.1 first-boot script called `findfs /`, which busybox does not
+#     The first-boot script of v3.1 to v3.3.0 called `findfs /`, which busybox does not
 #     support (it only accepts LABEL=/UUID=), so it always exited without
 #     doing anything. Had it run, it would have resized partition 2 of the
 #     squashfs image — a read-only squashfs whose overlay lives inside it —

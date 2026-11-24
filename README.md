@@ -43,6 +43,8 @@ Images are on the [Releases page](https://github.com/harryheros/harrywrt/release
 - A board missing from a release is not supported by that OpenWrt version.
 - OpenWrt 24.10 is end of life and no longer built; HarryWrt v4.0 was its last release.
 
+What changed in each release: [CHANGELOG.md](./CHANGELOG.md).
+
 **Verify** a download: put `SHA256SUMS` next to the image and run `sha256sum -c --ignore-missing SHA256SUMS` (macOS: `shasum -a 256 -c --ignore-missing SHA256SUMS`). Each build's `…-buildinfo.tar.gz` lists every package and the exact sources used; it is not needed to install.
 
 ---
