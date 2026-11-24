@@ -13,18 +13,20 @@ Fully compatible with upstream OpenWrt packages: everything in the official feed
 
 ## Editions
 
-**Clean**: for full control, servers and VMs.
+**Clean** is for full control, servers and VMs. **Plus** is for a primary home router, ready out of the box.
 
-- LuCI (HTTPS), web terminal, dnsmasq-full, nftables with TProxy / TUN, IPv6.
-- Network health page and multi-core tuning.
-- Root partition: 768 MB.
+| | Clean | Plus |
+|---|:---:|:---:|
+| LuCI (HTTPS), web terminal, IPv6 | ✓ | ✓ |
+| dnsmasq-full, nftables with TProxy / TUN | ✓ | ✓ |
+| Network health page, multi-core tuning | ✓ | ✓ |
+| WireGuard, DDNS, ACME | — | ✓ |
+| UPnP (off by default), Wake-on-LAN | — | ✓ |
+| Traffic monitoring, TCP BBR | — | ✓ |
+| Network cores: xray-core, sing-box, geo data | — | ✓ |
+| Root partition | 768 MB | 1024 MB |
 
-**Plus**: a primary home router, ready out of the box.
-
-- Everything in Clean.
-- WireGuard, DDNS, ACME, UPnP (off by default), traffic monitoring, Wake-on-LAN and TCP BBR.
-- Network cores (xray-core, sing-box and geo data), so LuCI apps that use them install offline.
-- Root partition: 1024 MB.
+With the network cores in Plus, the LuCI apps that use them install offline.
 
 Both editions reinstall the packages you added yourself after a firmware upgrade.
 
