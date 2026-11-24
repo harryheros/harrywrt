@@ -13,29 +13,34 @@ Fully compatible with upstream OpenWrt packages: everything in the official feed
 
 ## Editions
 
-| | **Clean** | **Plus** |
-|---|---|---|
-| For | Full control, servers and VMs | A primary home router, ready out of the box |
-| Base | LuCI (HTTPS), web terminal, dnsmasq-full, nftables with TProxy / TUN, IPv6 | Everything in Clean |
-| Extras | Network health page, multi-core tuning | WireGuard, DDNS, ACME, UPnP (off by default), traffic monitoring, Wake-on-LAN, TCP BBR |
-| Network cores | Not included | xray-core, sing-box and geo data, so LuCI apps that use them install offline |
-| Root partition | 768 MB | 1024 MB |
+**Clean**: for full control, servers and VMs.
+
+- LuCI (HTTPS), web terminal, dnsmasq-full, nftables with TProxy / TUN, IPv6.
+- Network health page and multi-core tuning.
+- Root partition: 768 MB.
+
+**Plus**: a primary home router, ready out of the box.
+
+- Everything in Clean.
+- WireGuard, DDNS, ACME, UPnP (off by default), traffic monitoring, Wake-on-LAN and TCP BBR.
+- Network cores (xray-core, sing-box and geo data), so LuCI apps that use them install offline.
+- Root partition: 1024 MB.
 
 Both editions reinstall the packages you added yourself after a firmware upgrade.
 
 ## Downloads
 
-Images are on the [Releases page](https://github.com/harryheros/harrywrt/releases), built on OpenWrt **25.12.6** (apk package manager). Pick `clean` or `plus` in the file name.
+Images are on the [Releases page](https://github.com/harryheros/harrywrt/releases), built on OpenWrt **25.12.6** (apk package manager). Pick `clean` or `plus` in the file name, then the file for your hardware:
 
-| Hardware | File |
-|---|---|
-| PC / mini PC / soft router (UEFI) | `*-x86_64-squashfs-uefi.img.gz` |
-| Old PC (legacy BIOS) | `*-x86_64-squashfs-bios.img.gz` |
-| Proxmox / ESXi / QEMU VM | `*-x86_64-ext4-uefi.img.gz` |
-| NanoPi R2S / R4S / R5C / R5S / R6C / R6S | `*-rockchip-friendlyarm_nanopi-<model>-squashfs-sysupgrade.img.gz` |
-| Raspberry Pi 4 / 400 / CM4 | `*-rpi4-rpi-4-squashfs-factory.img.gz` |
-| Raspberry Pi 5 | `*-rpi5-rpi-5-squashfs-factory.img.gz` |
-| ARM64 VM / UEFI server | `*-aarch64-squashfs-combined-efi.img.gz` |
+- **PC, mini PC or soft router (UEFI)**: `*-x86_64-squashfs-uefi.img.gz`
+- **Old PC (legacy BIOS)**: `*-x86_64-squashfs-bios.img.gz`
+- **Proxmox, ESXi or QEMU VM**: `*-x86_64-ext4-uefi.img.gz`
+- **NanoPi R2S, R4S, R5C, R5S, R6C, R6S**: `*-rockchip-friendlyarm_nanopi-<model>-squashfs-sysupgrade.img.gz`
+- **Raspberry Pi 4, 400, CM4**: `*-rpi4-rpi-4-squashfs-factory.img.gz`
+- **Raspberry Pi 5**: `*-rpi5-rpi-5-squashfs-factory.img.gz`
+- **ARM64 VM or UEFI server**: `*-aarch64-squashfs-combined-efi.img.gz`
+
+Notes:
 
 - **squashfs** is recommended (supports reset to defaults); **ext4** is fully writable.
 - NanoPi and Raspberry Pi: write the image to a microSD card (e.g. balenaEtcher). Raspberry Pi upgrades use the `sysupgrade` file.
@@ -81,7 +86,11 @@ uci set dhcp.@dnsmasq[0].port='5353' && uci commit dhcp && /etc/init.d/dnsmasq r
 /etc/init.d/adguardhome enable && /etc/init.d/adguardhome start
 ```
 
-Then finish setup at `http://192.168.1.1:3000`. To undo: `uci delete dhcp.@dnsmasq[0].port && uci commit dhcp && /etc/init.d/dnsmasq restart`, then stop and disable `adguardhome`.
+Then finish setup at `http://192.168.1.1:3000`. To undo, stop and disable `adguardhome`, then:
+
+```sh
+uci delete dhcp.@dnsmasq[0].port && uci commit dhcp && /etc/init.d/dnsmasq restart
+```
 
 ## Included packages
 
