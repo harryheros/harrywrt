@@ -1,12 +1,15 @@
-# HarryWrt — OpenWrt-Based Firmware
+# HarryWrt
 
-[![License](https://img.shields.io/badge/license-GPLv2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
-[![Platform](https://img.shields.io/badge/platform-x86__64%20%7C%20NanoPi%20%7C%20Raspberry%20Pi%20%7C%20ARM64%20VM-orange.svg)](#)
-[![Base](https://img.shields.io/badge/base-OpenWrt%2025.12.6-green.svg)](#)
+> OpenWrt-based firmware in two editions: stable and predictable, with no bloat, no lock-in and no telemetry.
 
-A stable, predictable OpenWrt firmware in two editions. No bloat, no lock-in, no telemetry — fully compatible with upstream OpenWrt packages.
+[![Version](https://img.shields.io/github/v/release/harryheros/harrywrt?label=version&color=blue)](https://github.com/harryheros/harrywrt/releases)
+[![Base](https://img.shields.io/badge/base-OpenWrt%2025.12.6-green.svg)](#downloads)
+[![License](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](#license)
+[![Platform](https://img.shields.io/badge/platform-x86__64%20%7C%20NanoPi%20%7C%20Raspberry%20Pi%20%7C%20ARM64%20VM-orange.svg)](#downloads)
 
----
+[Editions](#editions) · [Downloads](#downloads) · [First boot](#first-boot) · [Upgrading](#upgrading) · [Installing packages](#installing-packages) · [Changelog](./CHANGELOG.md) · [License](#license)
+
+Fully compatible with upstream OpenWrt packages: everything in the official feeds installs as usual.
 
 ## Editions
 
@@ -19,8 +22,6 @@ A stable, predictable OpenWrt firmware in two editions. No bloat, no lock-in, no
 | Root partition | 768 MB | 1024 MB |
 
 Both editions reinstall the packages you added yourself after a firmware upgrade.
-
----
 
 ## Downloads
 
@@ -47,15 +48,11 @@ What changed in each release: [CHANGELOG.md](./CHANGELOG.md).
 
 **Verify** a download: put `SHA256SUMS` next to the image and run `sha256sum -c --ignore-missing SHA256SUMS` (macOS: `shasum -a 256 -c --ignore-missing SHA256SUMS`). Each build's `…-buildinfo.tar.gz` lists every package and the exact sources used; it is not needed to install.
 
----
-
 ## First boot
 
 Connect to LAN (DHCP is on) and open **https://192.168.1.1**. Log in as `root`, set a password first. A browser certificate warning is expected (self-signed).
 
 Defaults: hostname `HarryWrt`, timezone UTC, NTP on. The network health page is under Status → Network Health.
-
----
 
 ## Upgrading
 
@@ -65,8 +62,6 @@ LuCI → System → Backup / Flash Firmware → upload the new `.img.gz`.
 - **From a 24.10-based build**: do not keep settings.
 
 **Your packages come back.** Packages you installed yourself are listed in `/etc/harrywrt/user-packages.list`, kept across upgrades, and reinstalled in the background on first boot (log: `/etc/harrywrt/restore.log`). A package not in the feeds, such as an uploaded file, is retried at every boot; run `harrywrt-pkg-restore` to retry now, or delete `/etc/harrywrt/pending-packages.list` to stop. When moving from 24.10, back up `user-packages.list` and copy it back before the first reboot.
-
----
 
 ## Installing packages
 
@@ -88,19 +83,15 @@ uci set dhcp.@dnsmasq[0].port='5353' && uci commit dhcp && /etc/init.d/dnsmasq r
 
 Then finish setup at `http://192.168.1.1:3000`. To undo: `uci delete dhcp.@dnsmasq[0].port && uci commit dhcp && /etc/init.d/dnsmasq restart`, then stop and disable `adguardhome`.
 
----
-
 ## Included packages
 
 **Both editions**: LuCI (HTTPS), luci-compat, Bootstrap theme, ttyd, bash, nano, curl, wget-ssl, unzip, htop, openssl-util, ca-bundle, ip-full, iperf3, tcpdump, ethtool, resolveip, dnsmasq-full, nftables (fw4) with kmod-tun, TProxy, socket and NAT modules, irqbalance.
 
 **Plus adds**: WireGuard (with QR export), DDNS (Cloudflare, No-IP), ACME / Let's Encrypt, miniupnpd, nlbwmon, Wake-on-LAN, mtr, TCP BBR, iptables-nft compatibility with TProxy modules, xray-core, sing-box, chinadns-ng, geoview, v2ray-geoip, v2ray-geosite, tcping.
 
----
-
 ## License
 
-GPL-2.0, following the OpenWrt licensing model. Provided as-is, without warranty; no telemetry, hidden services or proprietary components.
+[GPL-2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html), following the OpenWrt licensing model. Provided as-is, without warranty; no telemetry, hidden services or proprietary components.
 
 Credits: OpenWrt, LuCI, the Openwrt-Passwall package feed (network cores), AdGuard Home (AdGuard).
 
